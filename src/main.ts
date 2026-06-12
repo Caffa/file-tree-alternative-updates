@@ -8,6 +8,8 @@ import { getBookmarkTitle } from 'utils/Utils';
 export default class FileTreeAlternativePlugin extends Plugin {
     settings: FileTreeAlternativePluginSettings;
     ribbonIconEl: HTMLElement | undefined = undefined;
+    /** Guard flag to prevent duplicate pane creation during layout initialization */
+    private viewOpenedOnStart: boolean = false;
 
     keys = {
         activeFolderPathKey: 'fileTreePlugin-ActiveFolderPath',
@@ -45,8 +47,17 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.app.workspace.onLayoutReady(async () => {
             if (this.settings.openViewOnStart) {
                 await this.openFileTreeLeaf(true);
+                this.viewOpenedOnStart = true;
             }
         });
+
+        // Listen for layout changes to catch and clean up any duplicate panes
+        // that may appear after workspace restoration (common on mobile restart)
+        this.registerEvent(
+            this.app.workspace.on('layout-change', () => {
+                this.deduplicateFileTreeLeaves();
+            })
+        );
 
         // Add Command to Open File Tree Leaf
         this.addCommand({
@@ -65,12 +76,15 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.addCommand({
             id: 'reveal-active-file',
             name: 'Reveal Active File',
-            callback: () => {
+            callback: async () => {
                 // Activate file tree pane
                 let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
-                if (leafs.length === 0) this.openFileTreeLeaf(true);
-                for (let leaf of leafs) {
-                    this.app.workspace.revealLeaf(leaf);
+                if (leafs.length === 0) {
+                    await this.openFileTreeLeaf(true);
+                    leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+                }
+                if (leafs.length > 0) {
+                    this.app.workspace.revealLeaf(leafs[0]);
                 }
                 // Run custom event
                 let event = new CustomEvent(eventTypes.revealFile, {
@@ -202,17 +216,49 @@ export default class FileTreeAlternativePlugin extends Plugin {
         }
     };
 
+    /**
+     * Clean up duplicate panes, keeping only the first one.
+     * This prevents the accumulation of duplicate panes that occurs
+     * on mobile when workspace restoration and plugin initialization race.
+     */
+    deduplicateFileTreeLeaves = () => {
+        let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+        if (leafs.length > 1) {
+            // Keep the first leaf, destroy and detach extras
+            for (let i = 1; i < leafs.length; i++) {
+                const view = leafs[i].view as FileTreeView;
+                if (view && view.destroy) view.destroy();
+                leafs[i].detach();
+            }
+        }
+    };
+
     openFileTreeLeaf = async (showAfterAttach: boolean) => {
         let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+
+        // Deduplication: if there are multiple leaves, clean up extras
+        if (leafs.length > 1) {
+            this.deduplicateFileTreeLeaves();
+            leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+        }
+
         if (leafs.length == 0) {
+            // Only create a new leaf if we haven't already done so during layout init
+            // This prevents race conditions with workspace restoration on mobile restart
+            if (this.viewOpenedOnStart) return;
+
             // Needs to be mounted
             let leaf = this.app.workspace.getLeftLeaf(false);
+            if (!leaf) {
+                new Notice('Could not create File Tree pane');
+                return;
+            }
             await leaf.setViewState({ type: this.VIEW_TYPE });
             if (showAfterAttach) this.app.workspace.revealLeaf(leaf);
         } else {
-            // Already mounted - show if only selected showAfterAttach
+            // Already mounted - show only the first leaf
             if (showAfterAttach) {
-                leafs.forEach((leaf) => this.app.workspace.revealLeaf(leaf));
+                this.app.workspace.revealLeaf(leafs[0]);
             }
         }
     };

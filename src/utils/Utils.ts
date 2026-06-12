@@ -143,10 +143,27 @@ export const getParentFolderPaths = (file: TFile): string[] => {
 
 // Extracts the Folder Name from the Full Folder Path
 export const getFolderName = (folderPath: string, app: App) => {
-    if (folderPath === '/') return app.vault.getName();
+    if (folderPath === '/' || folderPath === '') return app.vault.getName();
     let index = folderPath.lastIndexOf('/');
     if (index !== -1) return folderPath.substring(index + 1);
     return folderPath;
+};
+
+/** Returns breadcrumb segments for a folder path.
+ *  Each segment has a label (folder name) and the full path to that folder. */
+export const getBreadcrumbSegments = (folderPath: string, app: App): { label: string; path: string }[] => {
+    const vaultName = app.vault.getName();
+    if (folderPath === '/' || folderPath === '') {
+        return [{ label: vaultName, path: '/' }];
+    }
+    const segments: { label: string; path: string }[] = [{ label: vaultName, path: '/' }];
+    const parts = folderPath.split('/');
+    let current = '';
+    for (const part of parts) {
+        current = current ? `${current}/${part}` : part;
+        segments.push({ label: part, path: current });
+    }
+    return segments;
 };
 
 export const internalPluginLoaded = (pluginName: string, app: App) => {

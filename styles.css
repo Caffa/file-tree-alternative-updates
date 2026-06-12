@@ -151,6 +151,47 @@ settings:
     border-radius: 8px;
 }
 
+.oz-file-tree-breadcrumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 0 8px;
+    scrollbar-width: none;
+}
+
+.oz-file-tree-breadcrumb::-webkit-scrollbar {
+    display: none;
+}
+
+.oz-file-tree-breadcrumb-segment {
+    cursor: default;
+    padding: 1px 4px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.oz-file-tree-breadcrumb-segment:not(.is-active) {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.oz-file-tree-breadcrumb-segment:not(.is-active):hover {
+    color: var(--text-normal);
+    background-color: var(--background-secondary-alt);
+}
+
+.oz-file-tree-breadcrumb-segment.is-active {
+    color: var(--oz-fta-file-pane-foldername-color);
+    font-weight: bold;
+}
+
+.oz-file-tree-breadcrumb-sep {
+    color: var(--text-faint);
+    user-select: none;
+}
+
 .oz-nav-action-button {
     color: var(--oz-fta-header-icon-colors);
     display: inline-block;

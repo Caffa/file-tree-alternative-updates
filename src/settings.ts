@@ -38,6 +38,7 @@ export interface FileTreeAlternativePluginSettings {
     deleteFileOption: DeleteFileOption;
     showFileNameAsFullPath: boolean;
     bookmarksEvents: boolean;
+    overrideFolderClick: boolean;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     deleteFileOption: 'trash',
     showFileNameAsFullPath: false,
     bookmarksEvents: false,
+    overrideFolderClick: false,
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -234,6 +236,20 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                     this.refreshView();
                 });
             });
+
+        new Setting(containerEl)
+            .setName('Override Folder Click')
+            .setDesc(
+                `When enabled, clicking on any folder name in the file path header navigates within Filetree Alternative ` +
+                `instead of opening the Obsidian native file explorer. The folder path becomes a clickable breadcrumb.`
+            )
+            .addToggle((toggle) =>
+                toggle.setValue(this.plugin.settings.overrideFolderClick).onChange((value) => {
+                    this.plugin.settings.overrideFolderClick = value;
+                    this.plugin.saveSettings();
+                    this.refreshView();
+                })
+            );
 
         /* ------------- File Pane Settings ------------- */
         containerEl.createEl('h2', { text: 'File Pane Settings' });

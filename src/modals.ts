@@ -149,7 +149,7 @@ export class VaultChangeModal extends Modal {
                     this.file.parent.path + '/' + newName
                 );
             } else if (this.action === 'create folder') {
-                this.app.vault.createFolder(this.file.path + '/' + newName);
+                await this.app.vault.createFolder(this.file.path + '/' + newName);
             } else if (this.action === 'create note') {
                 await createNewMarkdownFile(
                     this.plugin,

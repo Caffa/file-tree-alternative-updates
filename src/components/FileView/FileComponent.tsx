@@ -41,6 +41,12 @@ export function FileComponent(props: FilesProps) {
     // Folder Name Update once Active Folder Path Change
     useEffect(() => setTreeHeader(Util.getFolderName(activeFolderPath, plugin.app)), [activeFolderPath]);
 
+    // Breadcrumb segments for overrideFolderClick setting
+    const breadcrumbSegments = useMemo(
+        () => (plugin.settings.overrideFolderClick ? Util.getBreadcrumbSegments(activeFolderPath, plugin.app) : null),
+        [activeFolderPath, plugin.settings.overrideFolderClick]
+    );
+
     // File List Update once showSubFolders change
     useEffect(() => {
         setOzFileList(
@@ -215,7 +221,32 @@ export function FileComponent(props: FilesProps) {
                                     </div>
                                 )}
 
-                                <div className="oz-file-tree-header">{treeHeader}</div>
+                                <div className="oz-file-tree-header">
+                                    {breadcrumbSegments ? (
+                                        <span className="oz-file-tree-breadcrumb">
+                                            {breadcrumbSegments.map((seg, index) => (
+                                                <React.Fragment key={seg.path}>
+                                                    {index > 0 && (
+                                                        <span className="oz-file-tree-breadcrumb-sep"> › </span>
+                                                    )}
+                                                    <span
+                                                        className={`oz-file-tree-breadcrumb-segment${
+                                                            seg.path === activeFolderPath ? ' is-active' : ''
+                                                        }`}
+                                                        onClick={() => {
+                                                            if (seg.path !== activeFolderPath) {
+                                                                setActiveFolderPath(seg.path);
+                                                            }
+                                                        }}>
+                                                        {seg.label}
+                                                    </span>
+                                                </React.Fragment>
+                                            ))}
+                                        </span>
+                                    ) : (
+                                        treeHeader
+                                    )}
+                                </div>
                             </div>
                             {/* End: Header */}
 
