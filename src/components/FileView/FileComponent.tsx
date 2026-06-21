@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import Dropzone from 'react-dropzone';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as Icons from 'utils/icons';
 import FileTreeAlternativePlugin from 'main';
 import { OZFile } from 'utils/types';
@@ -9,7 +8,30 @@ import { useRecoilState } from 'recoil';
 import useForceUpdate from 'hooks/ForceUpdate';
 import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
-import LazyLoad from 'react-lazy-load';
+
+/** Lightweight lazy-load using IntersectionObserver. Replaces react-lazy-load. */
+function LazyLoad({ children, height }: { children: React.ReactNode; height: number }) {
+    const [visible, setVisible] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setVisible(true);
+                    observer.disconnect();
+                }
+            },
+            { rootMargin: '100px 0px' }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    return <div ref={ref} style={{ minHeight: visible ? undefined : height }}>{visible ? children : null}</div>;
+}
 
 interface FilesProps {
     plugin: FileTreeAlternativePlugin;
@@ -102,176 +124,206 @@ export function FileComponent(props: FilesProps) {
 
     const topIconSize = 19;
 
+    // Drag counter for native dragEnter/dragLeave coordination (avoids flicker from child elements)
+    const dragCounter = useRef(0);
+
+    const handleDragEnter = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current++;
+        setHighlight(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current--;
+        if (dragCounter.current === 0) {
+            setHighlight(false);
+        }
+    }, []);
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    const handleDrop = useCallback(
+        (e: React.DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current = 0;
+            setHighlight(false);
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length > 0) {
+                FileViewHandlers.handleOnDropFiles({
+                    files,
+                    activeFolderPath,
+                    plugin,
+                });
+            }
+        },
+        [activeFolderPath, plugin]
+    );
+
     return (
         <React.Fragment>
-            <Dropzone
-                onDrop={(files) =>
-                    FileViewHandlers.handleOnDropFiles({
-                        files,
-                        activeFolderPath,
-                        plugin,
-                    })
-                }
-                noClick={true}
-                onDragEnter={() => setHighlight(true)}
-                onDragLeave={() => setHighlight(false)}
-                onDropAccepted={() => setHighlight(false)}
-                onDropRejected={() => setHighlight(false)}>
-                {({ getRootProps, getInputProps }) => (
-                    <div {...getRootProps()} className={highlight ? 'drag-entered' : ''} style={{ width: '100%', height: '100%', position: 'relative' }}>
-                        <input {...getInputProps()} />
-
-                        <div className="oz-explorer-container">
-                            {/* Header */}
-                            <div className={`oz-file-tree-header-wrapper${plugin.settings.fixedHeaderInFileList ? ' file-tree-header-fixed' : ''}`}>
-                                <div className="oz-flex-container">
-                                    <div className="oz-nav-action-button" style={{ marginLeft: '0px' }}>
-                                        {['Horizontal', 'Vertical'].includes(plugin.settings.evernoteView) ? (
-                                            <Icons.IoIosCloseCircleOutline
-                                                onClick={(e) => handleGoBack(e)}
-                                                size={topIconSize}
-                                                aria-label="Close File Pane"
-                                            />
-                                        ) : (
-                                            <Icons.IoIosArrowBack
-                                                onClick={(e) => handleGoBack(e)}
-                                                size={topIconSize}
-                                                aria-label="Go Back to Folder View"
-                                            />
-                                        )}
-                                    </div>
-                                    <div className="oz-nav-buttons-right-block">
-                                        {plugin.settings.revealActiveFileButton && (
-                                            <div className="oz-nav-action-button">
-                                                <Icons.BiCurrentLocation
-                                                    onClick={() => FileViewHandlers.handleRevealActiveFileButton({ plugin })}
-                                                    size={topIconSize}
-                                                    aria-label="Reveal Active File"
-                                                />
-                                            </div>
-                                        )}
-                                        {plugin.settings.showFilesFromSubFoldersButton && (
-                                            <div className="oz-nav-action-button">
-                                                {showSubFolders ? (
-                                                    <Icons.IoIosEyeOff
-                                                        onClick={toggleShowSubFolders}
-                                                        size={topIconSize}
-                                                        aria-label="Hide Files from Sub-Folders"
-                                                    />
-                                                ) : (
-                                                    <Icons.IoIosEye
-                                                        onClick={toggleShowSubFolders}
-                                                        size={topIconSize}
-                                                        aria-label="Show Files from Sub-Folders"
-                                                    />
-                                                )}
-                                            </div>
-                                        )}
-                                        {plugin.settings.searchFunction && (
-                                            <div className="oz-nav-action-button">
-                                                <Icons.IoIosSearch onClick={toggleSearchBox} size={topIconSize} aria-label="Search File by Name or Tag" />
-                                            </div>
-                                        )}
-                                        <div className="oz-nav-action-button">
-                                            <Icons.CgSortAz
-                                                size={topIconSize + 2}
-                                                onClick={(e) => {
-                                                    FileViewHandlers.sortFileListClickHandle({ e, plugin, forceUpdate });
-                                                }}
-                                                aria-label="Sorting Options"
-                                            />
-                                        </div>
-                                        <div className="oz-nav-action-button">
-                                            <Icons.IoIosAddCircle
-                                                onClick={(e) => Util.createNewFile(e, activeFolderPath, plugin)}
-                                                size={topIconSize}
-                                                aria-label="Create a Note"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {searchBoxVisible && (
-                                    <div className="oz-input-container">
-                                        <input
-                                            type="search"
-                                            placeholder="Search..."
-                                            ref={searchInput}
-                                            value={searchPhrase}
-                                            onChange={(e) => {
-                                                FileViewHandlers.handleSearch({
-                                                    e,
-                                                    plugin,
-                                                    activeFolderPath,
-                                                    setSearchPhrase,
-                                                    setTreeHeader,
-                                                    setOzFileList,
-                                                    excludedExtensions,
-                                                    excludedFolders,
-                                                    focusedFolder,
-                                                });
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Escape') {
-                                                    e.preventDefault();
-                                                    toggleSearchBox();
-                                                }
-                                            }}
+            <div
+                className={highlight ? 'drag-entered' : ''}
+                style={{ width: '100%', height: '100%', position: 'relative' }}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}>
+                <div className="oz-explorer-container">
+                    {/* Header */}
+                    <div className={`oz-file-tree-header-wrapper${plugin.settings.fixedHeaderInFileList ? ' file-tree-header-fixed' : ''}`}>
+                        <div className="oz-flex-container">
+                            <div className="oz-nav-action-button" style={{ marginLeft: '0px' }}>
+                                {['Horizontal', 'Vertical'].includes(plugin.settings.evernoteView) ? (
+                                    <Icons.IoIosCloseCircleOutline
+                                        onClick={(e) => handleGoBack(e)}
+                                        size={topIconSize}
+                                        aria-label="Close File Pane"
+                                    />
+                                ) : (
+                                    <Icons.IoIosArrowBack
+                                        onClick={(e) => handleGoBack(e)}
+                                        size={topIconSize}
+                                        aria-label="Go Back to Folder View"
+                                    />
+                                )}
+                            </div>
+                            <div className="oz-nav-buttons-right-block">
+                                {plugin.settings.revealActiveFileButton && (
+                                    <div className="oz-nav-action-button">
+                                        <Icons.BiCurrentLocation
+                                            onClick={() => FileViewHandlers.handleRevealActiveFileButton({ plugin })}
+                                            size={topIconSize}
+                                            aria-label="Reveal Active File"
                                         />
                                     </div>
                                 )}
-
-                                <div className="oz-file-tree-header">
-                                    {breadcrumbSegments ? (
-                                        <span className="oz-file-tree-breadcrumb">
-                                            {breadcrumbSegments.map((seg, index) => (
-                                                <React.Fragment key={seg.path}>
-                                                    {index > 0 && (
-                                                        <span className="oz-file-tree-breadcrumb-sep"> › </span>
-                                                    )}
-                                                    <span
-                                                        className={`oz-file-tree-breadcrumb-segment${
-                                                            seg.path === activeFolderPath ? ' is-active' : ''
-                                                        }`}
-                                                        onClick={() => {
-                                                            if (seg.path !== activeFolderPath) {
-                                                                setActiveFolderPath(seg.path);
-                                                            }
-                                                        }}>
-                                                        {seg.label}
-                                                    </span>
-                                                </React.Fragment>
-                                            ))}
-                                        </span>
-                                    ) : (
-                                        treeHeader
-                                    )}
+                                {plugin.settings.showFilesFromSubFoldersButton && (
+                                    <div className="oz-nav-action-button">
+                                        {showSubFolders ? (
+                                            <Icons.IoIosEyeOff
+                                                onClick={toggleShowSubFolders}
+                                                size={topIconSize}
+                                                aria-label="Hide Files from Sub-Folders"
+                                            />
+                                        ) : (
+                                            <Icons.IoIosEye
+                                                onClick={toggleShowSubFolders}
+                                                size={topIconSize}
+                                                aria-label="Show Files from Sub-Folders"
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                                {plugin.settings.searchFunction && (
+                                    <div className="oz-nav-action-button">
+                                        <Icons.IoIosSearch onClick={toggleSearchBox} size={topIconSize} aria-label="Search File by Name or Tag" />
+                                    </div>
+                                )}
+                                <div className="oz-nav-action-button">
+                                    <Icons.CgSortAz
+                                        size={topIconSize + 2}
+                                        onClick={(e) => {
+                                            FileViewHandlers.sortFileListClickHandle({ e, plugin, forceUpdate });
+                                        }}
+                                        aria-label="Sorting Options"
+                                    />
+                                </div>
+                                <div className="oz-nav-action-button">
+                                    <Icons.IoIosAddCircle
+                                        onClick={(e) => Util.createNewFile(e, activeFolderPath, plugin)}
+                                        size={topIconSize}
+                                        aria-label="Create a Note"
+                                    />
                                 </div>
                             </div>
-                            {/* End: Header */}
+                        </div>
 
-                            {/* File List */}
-                            <div
-                                className={`oz-file-tree-files${
-                                    plugin.settings.fixedHeaderInFileList
-                                        ? searchBoxVisible
-                                            ? ' file-tree-files-fixed-with-search'
-                                            : ' file-tree-files-fixed'
-                                        : ''
-                                }`}>
-                                {filesToList.map((file, index) => {
-                                    return (
-                                        <LazyLoad height={22} key={index}>
-                                            <NavFile file={file} plugin={plugin} />
-                                        </LazyLoad>
-                                    );
-                                })}
+                        {searchBoxVisible && (
+                            <div className="oz-input-container">
+                                <input
+                                    type="search"
+                                    placeholder="Search..."
+                                    ref={searchInput}
+                                    value={searchPhrase}
+                                    onChange={(e) => {
+                                        FileViewHandlers.handleSearch({
+                                            e,
+                                            plugin,
+                                            activeFolderPath,
+                                            setSearchPhrase,
+                                            setTreeHeader,
+                                            setOzFileList,
+                                            excludedExtensions,
+                                            excludedFolders,
+                                            focusedFolder,
+                                        });
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            toggleSearchBox();
+                                        }
+                                    }}
+                                />
                             </div>
-                            {/* End: File List */}
+                        )}
+
+                        <div className="oz-file-tree-header">
+                            {breadcrumbSegments ? (
+                                <span className="oz-file-tree-breadcrumb">
+                                    {breadcrumbSegments.map((seg, index) => (
+                                        <React.Fragment key={seg.path}>
+                                            {index > 0 && (
+                                                <span className="oz-file-tree-breadcrumb-sep"> › </span>
+                                            )}
+                                            <span
+                                                className={`oz-file-tree-breadcrumb-segment${
+                                                    seg.path === activeFolderPath ? ' is-active' : ''
+                                                }`}
+                                                onClick={() => {
+                                                    if (seg.path !== activeFolderPath) {
+                                                        setActiveFolderPath(seg.path);
+                                                    }
+                                                }}>
+                                                {seg.label}
+                                            </span>
+                                        </React.Fragment>
+                                    ))}
+                                </span>
+                            ) : (
+                                treeHeader
+                            )}
                         </div>
                     </div>
-                )}
-            </Dropzone>
+                    {/* End: Header */}
+
+                    {/* File List */}
+                    <div
+                        className={`oz-file-tree-files${
+                            plugin.settings.fixedHeaderInFileList
+                                ? searchBoxVisible
+                                    ? ' file-tree-files-fixed-with-search'
+                                    : ' file-tree-files-fixed'
+                                : ''
+                        }`}>
+                        {filesToList.map((file, index) => {
+                            return (
+                                <LazyLoad height={22} key={index}>
+                                    <NavFile file={file} plugin={plugin} />
+                                </LazyLoad>
+                            );
+                        })}
+                    </div>
+                    {/* End: File List */}
+                </div>
+            </div>
         </React.Fragment>
     );
 }

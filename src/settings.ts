@@ -1,6 +1,6 @@
 import FileTreeAlternativePlugin from './main';
 import { PluginSettingTab, Setting, App, Notice } from 'obsidian';
-import { LocalStorageHandler } from '@ozntel/local-storage-handler';
+// LocalStorageHandler replaced with native localStorage.removeItem()
 import { eventTypes } from 'utils/types';
 
 type FolderIcon = 'default' | 'box-folder' | 'icomoon' | 'typicon' | 'circle-gg';
@@ -89,8 +89,6 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
     display(): void {
         let { containerEl } = this;
         containerEl.empty();
-
-        let lsh = new LocalStorageHandler({});
 
         /* ------------- Buy Me a Coffee ------------- */
 
@@ -463,11 +461,11 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                     .setTooltip('Click here to clear the cache data')
                     .setButtonText('Click for Clearing the Cache')
                     .onClick(async () => {
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.customHeightKey });
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.customWidthKey });
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.openFoldersKey });
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.activeFolderPathKey });
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.focusedFolder });
+                        localStorage.removeItem(this.plugin.keys.customHeightKey);
+                        localStorage.removeItem(this.plugin.keys.customWidthKey);
+                        localStorage.removeItem(this.plugin.keys.openFoldersKey);
+                        localStorage.removeItem(this.plugin.keys.activeFolderPathKey);
+                        localStorage.removeItem(this.plugin.keys.focusedFolder);
                         this.plugin.refreshTreeLeafs();
                         new Notice('The plugin cache is cleared...');
                     });
@@ -481,7 +479,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                     .setTooltip('Click here to clear the pinned files')
                     .setButtonText('Click for Clearing the Pinned files')
                     .onClick(async () => {
-                        lsh.removeFromLocalStorage({ key: this.plugin.keys.pinnedFilesKey });
+                        localStorage.removeItem(this.plugin.keys.pinnedFilesKey);
                         this.plugin.refreshTreeLeafs();
                         new Notice('The pinned files are cleared...');
                     });

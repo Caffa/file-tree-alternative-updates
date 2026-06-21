@@ -1,7 +1,6 @@
 import { TFolder, Notice } from 'obsidian';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import FileTreeAlternativePlugin from 'main';
-import Dropzone from 'react-dropzone';
 import { getFolderIcon, IoMdArrowDropright } from 'utils/icons';
 import * as recoilState from '../../../recoil/pluginState';
 import { useRecoilState } from 'recoil';
@@ -55,15 +54,6 @@ export default function Tree(props: TreeProps) {
         }
     };
 
-    // --> Function After an External File Dropped into Folder Name
-    const onDrop = (files: File[]) => {
-        files.map(async (file) => {
-            file.arrayBuffer().then((arrayBuffer) => {
-                props.plugin.app.vault.adapter.writeBinary(props.folder.path + '/' + file.name, arrayBuffer);
-            });
-        });
-    };
-
     // --> Click Events
     const folderNameClickEvent = (ev: React.MouseEvent) => {
         if (props.plugin.settings.folderNote && ev.shiftKey) {
@@ -87,41 +77,6 @@ export default function Tree(props: TreeProps) {
     // --> Folder Count Map
     const folderCount = folderFileCountMap[props.folder.path];
 
-    // --> Drag and Drop Actions
-    const dropFileOrFolder = (e: React.DragEvent<HTMLDivElement>) => {
-        let data = e.dataTransfer.getData('application/json');
-        if (data !== '') {
-            let dataJson = JSON.parse(data);
-            // File Drop
-            if (dataJson['filePath']) {
-                const filePath = dataJson.filePath;
-                // check if file exists
-                let file = props.plugin.app.vault.getAbstractFileByPath(filePath);
-                if (file) {
-                    props.plugin.app.vault.rename(file, `${props.folder.path}/${file.name}`);
-                } else {
-                    new Notice('Couldnt find the file');
-                }
-            }
-            // Folder Drop
-            else if (dataJson['folderPath']) {
-                const folderPath = dataJson.folderPath;
-                let folder = props.plugin.app.vault.getAbstractFileByPath(folderPath);
-                if (folder) {
-                    if (!props.folder.path.startsWith(folder.path)) {
-                        props.plugin.app.vault.rename(folder, `${props.folder.path}/${folder.name}`);
-                    } else {
-                        new Notice('You cant move folder under its child');
-                    }
-                } else {
-                    new Notice('Couldnt find the folder');
-                }
-            }
-        }
-        setHightlight(false);
-        e.dataTransfer.clearData();
-    };
-
     const onFolderDragStart = (e: React.DragEvent<HTMLDivElement>, folder: TFolder) => {
         e.dataTransfer.setData('application/json', JSON.stringify({ folderPath: folder.path }));
 
@@ -130,77 +85,136 @@ export default function Tree(props: TreeProps) {
         dragManager.onDragStart(e.nativeEvent, dragData);
     };
 
+    // Drag counter for native dragEnter/dragLeave coordination
+    const dragCounter = useRef(0);
+
+    const handleNativeDrop = useCallback(
+        (e: React.DragEvent<HTMLDivElement>) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current = 0;
+            setHightlight(false);
+
+            // 1) Handle internal Obsidian drag (JSON data — file/folder moves)
+            const jsonData = e.dataTransfer.getData('application/json');
+            if (jsonData !== '') {
+                let dataJson = JSON.parse(jsonData);
+                if (dataJson['filePath']) {
+                    const filePath = dataJson.filePath;
+                    let file = props.plugin.app.vault.getAbstractFileByPath(filePath);
+                    if (file) {
+                        props.plugin.app.vault.rename(file, `${props.folder.path}/${file.name}`);
+                    } else {
+                        new Notice('Couldnt find the file');
+                    }
+                } else if (dataJson['folderPath']) {
+                    const folderPath = dataJson.folderPath;
+                    let folder = props.plugin.app.vault.getAbstractFileByPath(folderPath);
+                    if (folder) {
+                        if (!props.folder.path.startsWith(folder.path)) {
+                            props.plugin.app.vault.rename(folder, `${props.folder.path}/${folder.name}`);
+                        } else {
+                            new Notice('You cant move folder under its child');
+                        }
+                    } else {
+                        new Notice('Couldnt find the folder');
+                    }
+                }
+                e.dataTransfer.clearData();
+                return;
+            }
+
+            // 2) Handle external file drops (File objects from OS)
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length > 0) {
+                files.map(async (file) => {
+                    file.arrayBuffer().then((arrayBuffer) => {
+                        props.plugin.app.vault.adapter.writeBinary(props.folder.path + '/' + file.name, arrayBuffer);
+                    });
+                });
+            }
+        },
+        [props.folder.path, props.plugin.app.vault]
+    );
+
+    // Consolidated dragEnter for the oz-folder-element
+    const handleFolderDragEnter = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current++;
+        setHightlight(true);
+    }, []);
+
+    const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current--;
+        if (dragCounter.current <= 0) {
+            dragCounter.current = 0;
+            setHightlight(false);
+        }
+    }, []);
+
     return (
-        <Dropzone
-            onDrop={onDrop}
-            noClick={true}
-            onDragEnter={() => setHightlight(true)}
-            onDragLeave={() => setHightlight(false)}
-            onDropAccepted={() => setHightlight(false)}
-            onDropRejected={() => setHightlight(false)}>
-            {({ getRootProps, getInputProps }) => (
-                <React.Fragment>
-                    <div
-                        style={{ ...props.style }}
-                        className="treeview"
-                        draggable
-                        onDragStart={(e) => onFolderDragStart(e, props.folder)}
-                        onDrop={(e) => dropFileOrFolder(e)}
-                        onDragOver={() => setHightlight(true)}
-                        onDragLeave={() => setHightlight(false)}>
+        <React.Fragment>
+            <div
+                style={{ ...props.style }}
+                className="treeview"
+                draggable
+                onDragStart={(e) => onFolderDragStart(e, props.folder)}>
+                <div
+                    className={'oz-folder-element' + (highlight ? ' drag-entered' : '')}
+                    data-path={props.folder.path}
+                    onDragEnter={handleFolderDragEnter}
+                    onDragLeave={handleFolderDragLeave}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={handleNativeDrop}>
+
+                    <div className="oz-folder-line">
+                        <div className="oz-icon-div">
+                            <Icon className="oz-folder-toggle" style={{ opacity: props.children ? 1 : 0.3 }} onClick={toggle} />
+                        </div>
+
                         <div
-                            {...getRootProps({ className: 'dropzone' })}
-                            className={'oz-folder-element' + (highlight ? ' drag-entered' : '')}
-                            data-path={props.folder.path}>
-                            <input {...getInputProps()} />
-
-                            <div className="oz-folder-line">
-                                <div className="oz-icon-div">
-                                    <Icon className="oz-folder-toggle" style={{ opacity: props.children ? 1 : 0.3 }} onClick={toggle} />
-                                </div>
-
-                                <div
-                                    className="oz-folder-block"
-                                    onClick={folderNameClickEvent}
-                                    onDoubleClick={folderNameDoubleClickEvent}
-                                    onContextMenu={folderContextMenuEvent}
-                                    {...longPressEvents}>
-                                    <div className="oz-folder-type" style={{ marginRight: props.type ? 10 : 0 }}>
-                                        {props.type}
-                                    </div>
-                                    <div
-                                        className={`oz-folder-name ${isFolderActive ? 'is-folder-active' : ''}${
-                                            props.isRootFolder ? ' is-root-folder' : ''
-                                        }`}>
-                                        {props.content}{' '}
-                                        {props.plugin.settings.folderNote && props.folder.children.some((f) => f.name === `${props.folder.name}.md`) ? (
-                                            <IoMdArrowDropright size={10} className="oz-folder-note-icon" />
-                                        ) : (
-                                            ''
-                                        )}
-                                    </div>
-                                    {props.plugin.settings.folderCount && (
-                                        <div className="oz-folder-count">
-                                            <span className="oz-nav-file-tag">{folderCount ? (open ? folderCount.open : folderCount.closed) : 0}</span>
-                                        </div>
-                                    )}
-                                </div>
+                            className="oz-folder-block"
+                            onClick={folderNameClickEvent}
+                            onDoubleClick={folderNameDoubleClickEvent}
+                            onContextMenu={folderContextMenuEvent}
+                            {...longPressEvents}>
+                            <div className="oz-folder-type" style={{ marginRight: props.type ? 10 : 0 }}>
+                                {props.type}
                             </div>
+                            <div
+                                className={`oz-folder-name ${isFolderActive ? 'is-folder-active' : ''}${
+                                    props.isRootFolder ? ' is-root-folder' : ''
+                                }`}>
+                                {props.content}{' '}
+                                {props.plugin.settings.folderNote && props.folder.children.some((f) => f.name === `${props.folder.name}.md`) ? (
+                                    <IoMdArrowDropright size={10} className="oz-folder-note-icon" />
+                                ) : (
+                                    ''
+                                )}
+                            </div>
+                            {props.plugin.settings.folderCount && (
+                                <div className="oz-folder-count">
+                                    <span className="oz-nav-file-tag">{folderCount ? (open ? folderCount.open : folderCount.closed) : 0}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    {props.children && (
-                        <div
-                            className="oz-folder-contents"
-                            style={{
-                                height: open ? 'auto' : 0,
-                                opacity: open ? 1 : 0,
-                                display: open ? 'inherit' : 'none',
-                            }}>
-                            {props.children}
-                        </div>
-                    )}
-                </React.Fragment>
+                </div>
+            </div>
+            {props.children && (
+                <div
+                    className="oz-folder-contents"
+                    style={{
+                        height: open ? 'auto' : 0,
+                        opacity: open ? 1 : 0,
+                        display: open ? 'inherit' : 'none',
+                    }}>
+                    {props.children}
+                </div>
             )}
-        </Dropzone>
+        </React.Fragment>
     );
 }
