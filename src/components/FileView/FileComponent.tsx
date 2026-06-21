@@ -4,7 +4,7 @@ import * as Icons from 'utils/icons';
 import FileTreeAlternativePlugin from 'main';
 import { OZFile } from 'utils/types';
 import * as Util from 'utils/Utils';
-import * as recoilState from 'recoil/pluginState';
+import * as recoilState from '../../recoil/pluginState';
 import { useRecoilState } from 'recoil';
 import useForceUpdate from 'hooks/ForceUpdate';
 import useLongPress from 'hooks/useLongPress';

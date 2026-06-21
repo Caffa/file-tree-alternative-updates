@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import FileTreeAlternativePlugin from 'main';
 import Dropzone from 'react-dropzone';
 import { getFolderIcon, IoMdArrowDropright } from 'utils/icons';
-import * as recoilState from 'recoil/pluginState';
+import * as recoilState from '../../../recoil/pluginState';
 import { useRecoilState } from 'recoil';
 import useLongPress from 'hooks/useLongPress';
 

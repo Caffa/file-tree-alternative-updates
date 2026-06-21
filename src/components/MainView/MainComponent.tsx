@@ -6,7 +6,7 @@ import { SingleViewVertical, SingleViewHorizontal } from 'components/MainView/Si
 import { FileTreeView } from 'FileTreeView';
 import FileTreeAlternativePlugin from 'main';
 import * as FileTreeUtils from 'utils/Utils';
-import * as recoilState from 'recoil/pluginState';
+import * as recoilState from '../../recoil/pluginState';
 import { useRecoilState } from 'recoil';
 import useForceUpdate from 'hooks/ForceUpdate';
 import { CustomVaultChangeEvent, VaultChange, eventTypes, OZFile } from 'utils/types';

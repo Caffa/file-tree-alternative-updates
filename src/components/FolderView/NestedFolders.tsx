@@ -4,7 +4,7 @@ import { FolderTree } from 'utils/types';
 import FileTreeAlternativePlugin from 'main';
 import Tree from 'components/FolderView/treeComponent/TreeComponent';
 import { useRecoilState } from 'recoil';
-import * as recoilState from 'recoil/pluginState';
+import * as recoilState from '../../recoil/pluginState';
 import * as Util from 'utils/Utils';
 import { VaultChangeModal, MoveSuggestionModal, ConfirmationModal } from 'modals';
 import * as newFileUtils from 'utils/newFile';

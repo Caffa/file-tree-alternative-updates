@@ -1,17 +1,26 @@
 {
     "compilerOptions": {
-        "jsx": "react",
+        "jsx": "react-jsx",
         "esModuleInterop": true,
-        "baseUrl": "src",
         "isolatedModules": true,
         "module": "ESNext",
-        "target": "es6",
-        "allowJs": true,
+        "moduleResolution": "bundler",
+        "target": "es2018",
         "noImplicitAny": true,
-        "moduleResolution": "node",
-        "importHelpers": true,
         "allowSyntheticDefaultImports": true,
-        "lib": ["dom", "es5", "scripthost", "es2015"]
+        "skipLibCheck": true,
+        "lib": ["dom", "es2018"],
+        "baseUrl": ".",
+        "paths": {
+            "main": ["src/main.ts"],
+            "modals": ["src/modals.ts"],
+            "settings": ["src/settings.ts"],
+            "FileTreeView": ["src/FileTreeView.tsx"],
+            "utils/*": ["src/utils/*"],
+            "components/*": ["src/components/*"],
+            "hooks/*": ["src/hooks/*"],
+            "recoil/*": ["src/recoil/*"]
+        }
     },
     "include": ["**/*.ts", "**/*.tsx", "src/FileTreeView.tsx"]
 }

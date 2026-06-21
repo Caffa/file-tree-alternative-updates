@@ -3,7 +3,7 @@ import Tree from 'components/FolderView/treeComponent/TreeComponent';
 import FileTreeAlternativePlugin from 'main';
 import ConditionalRootFolderWrapper from 'components/FolderView/ConditionalWrapper';
 import { useRecoilState } from 'recoil';
-import * as recoilState from 'recoil/pluginState';
+import * as recoilState from '../../recoil/pluginState';
 import { NestedFolders } from 'components/FolderView/NestedFolders';
 import { TFolder, Menu } from 'obsidian';
 import { VaultChangeModal } from 'modals';
