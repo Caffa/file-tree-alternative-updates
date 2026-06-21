@@ -9,7 +9,8 @@ import * as FileTreeUtils from 'utils/Utils';
 import * as recoilState from '../../recoil/pluginState';
 import { useRecoilState } from 'recoil';
 import useForceUpdate from 'hooks/ForceUpdate';
-import { CustomVaultChangeEvent, VaultChange, eventTypes, OZFile } from 'utils/types';
+import { VaultChange, eventTypes, OZFile } from 'utils/types';
+import { eventBus } from 'utils/eventBus';
 
 interface MainTreeComponentProps {
     fileTreeView: FileTreeView;
@@ -61,21 +62,21 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         }
     };
 
-    // --> Create Custom Event Handlers
+    // --> Subscribe to plugin-internal event bus (replaces window.dispatchEvent pattern)
     useEffect(() => {
-        window.addEventListener(eventTypes.vaultChange, vaultChangeEvent);
-        window.addEventListener(eventTypes.activeFileChange, changeActiveFile);
-        window.addEventListener(eventTypes.refreshView, forceUpdate);
-        window.addEventListener(eventTypes.revealFile, handleRevealFileEvent);
-        window.addEventListener(eventTypes.revealFolder, handleRevealFolderEvent);
-        window.addEventListener(eventTypes.createNewNote, handleCreateNewNoteEvent);
+        const unsubVaultChange = eventBus.on(eventTypes.vaultChange, vaultChangeEvent);
+        const unsubActiveFile = eventBus.on(eventTypes.activeFileChange, changeActiveFile);
+        const unsubRefresh = eventBus.on(eventTypes.refreshView, forceUpdate);
+        const unsubRevealFile = eventBus.on(eventTypes.revealFile, handleRevealFileEvent);
+        const unsubRevealFolder = eventBus.on(eventTypes.revealFolder, handleRevealFolderEvent);
+        const unsubCreateNote = eventBus.on(eventTypes.createNewNote, handleCreateNewNoteEvent);
         return () => {
-            window.removeEventListener(eventTypes.vaultChange, vaultChangeEvent);
-            window.removeEventListener(eventTypes.activeFileChange, changeActiveFile);
-            window.removeEventListener(eventTypes.refreshView, forceUpdate);
-            window.removeEventListener(eventTypes.revealFile, handleRevealFileEvent);
-            window.removeEventListener(eventTypes.revealFolder, handleRevealFolderEvent);
-            window.removeEventListener(eventTypes.createNewNote, handleCreateNewNoteEvent);
+            unsubVaultChange();
+            unsubActiveFile();
+            unsubRefresh();
+            unsubRevealFile();
+            unsubRevealFolder();
+            unsubCreateNote();
         };
     }, []);
 
@@ -88,13 +89,12 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         FileTreeUtils.createNewFile(null, currentActiveFolderPath, plugin);
     };
 
-    const vaultChangeEvent = (evt: CustomVaultChangeEvent) => {
-        handleVaultChanges(evt.detail.file, evt.detail.changeType, evt.detail.oldPath);
+    const vaultChangeEvent = (detail: { file: TFile; changeType: VaultChange; oldPath: string }) => {
+        handleVaultChanges(detail.file, detail.changeType, detail.oldPath);
     };
 
-    const changeActiveFile = (evt: Event) => {
-        // @ts-ignore
-        let filePath: string = evt.detail.filePath;
+    const changeActiveFile = (detail: { filePath: string }) => {
+        let filePath: string = detail.filePath;
         const file = plugin.app.vault.getFileByPath(filePath);
         if (file) setActiveOzFile(FileTreeUtils.TFile2OZFile(file));
     };
@@ -355,9 +355,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     }, [ozFileList]);
 
     // Custom Event Handler Function
-    async function handleRevealFileEvent(evt: Event) {
-        // @ts-ignore
-        const file: TFile = evt.detail.file;
+    async function handleRevealFileEvent(detail: { file: TFile }) {
+        const file: TFile = detail.file;
         if (file && file instanceof TFile) {
             await plugin.openFileTreeLeaf(true);
             revealFileInFileTree(FileTreeUtils.TFile2OZFile(file));
@@ -366,9 +365,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         }
     }
 
-    function handleRevealFolderEvent(evt: Event) {
-        // @ts-ignore
-        const folder: TFolder = evt.detail.folder;
+    function handleRevealFolderEvent(detail: { folder: TFolder }) {
+        const folder: TFolder = detail.folder;
         if (folder && folder instanceof TFolder) {
             revealFolderInFileTree(folder);
         } else {

@@ -1,6 +1,7 @@
 import FileTreeAlternativePlugin from 'main';
 import { TFile, TFolder, App } from 'obsidian';
 import { eventTypes, OZFile } from 'utils/types';
+import { eventBus } from 'utils/eventBus';
 
 export const openFile = (props: { file: OZFile; app: App; newLeaf: boolean; leafBySplit?: boolean }) => {
     const { file, app, newLeaf, leafBySplit } = props;
@@ -45,8 +46,7 @@ export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, f
     const newFile = await plugin.app.fileManager.createNewMarkdownFile(folder, newFileName);
     if (content && content !== '') await plugin.app.vault.modify(newFile, content);
     openFile({ file: newFile, app: plugin.app, newLeaf: false });
-    let evt = new CustomEvent(eventTypes.activeFileChange, { detail: { filePath: newFile.path } });
-    window.dispatchEvent(evt);
+    eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
 };
 
 export const openFileInNewTab = (app: App, file: OZFile) => {

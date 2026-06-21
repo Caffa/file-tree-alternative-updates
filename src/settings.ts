@@ -2,6 +2,7 @@ import FileTreeAlternativePlugin from './main';
 import { PluginSettingTab, Setting, App, Notice } from 'obsidian';
 // LocalStorageHandler replaced with native localStorage.removeItem()
 import { eventTypes } from 'utils/types';
+import { eventBus } from 'utils/eventBus';
 
 type FolderIcon = 'default' | 'box-folder' | 'icomoon' | 'typicon' | 'circle-gg';
 export type SortType = 'name' | 'last-update' | 'created' | 'file-size';
@@ -82,8 +83,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
     }
 
     refreshView() {
-        let evt = new CustomEvent(eventTypes.refreshView, {});
-        window.dispatchEvent(evt);
+        eventBus.emit(eventTypes.refreshView);
     }
 
     display(): void {

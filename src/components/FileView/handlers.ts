@@ -1,6 +1,7 @@
 import FileTreeAlternativePlugin from 'main';
 import { VaultChangeModal, MoveSuggestionModal, ConfirmationModal } from 'modals';
 import { OZFile, eventTypes } from 'utils/types';
+import { eventBus } from 'utils/eventBus';
 import * as Util from 'utils/Utils';
 import { TFile, TFolder } from 'obsidian';
 import * as newFileUtils from 'utils/newFile';
@@ -101,12 +102,9 @@ const getFilesWithTag = (params: {
 
 export const handleRevealActiveFileButton = (params: { plugin: FileTreeAlternativePlugin }) => {
     let { plugin } = params;
-    let event = new CustomEvent(eventTypes.revealFile, {
-        detail: {
-            file: plugin.app.workspace.getActiveFile(),
-        },
+    eventBus.emit(eventTypes.revealFile, {
+        file: plugin.app.workspace.getActiveFile(),
     });
-    window.dispatchEvent(event);
 };
 
 // Sort - Filter Files Depending on Preferences

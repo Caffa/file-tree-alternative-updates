@@ -3,6 +3,7 @@ import { FileTreeView } from './FileTreeView';
 import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } from './utils/icons';
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
+import { eventBus } from 'utils/eventBus';
 import { getBookmarkTitle } from 'utils/Utils';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -87,12 +88,9 @@ export default class FileTreeAlternativePlugin extends Plugin {
                     this.app.workspace.revealLeaf(leafs[0]);
                 }
                 // Run custom event
-                let event = new CustomEvent(eventTypes.revealFile, {
-                    detail: {
-                        file: this.app.workspace.getActiveFile(),
-                    },
+                eventBus.emit(eventTypes.revealFile, {
+                    file: this.app.workspace.getActiveFile(),
                 });
-                window.dispatchEvent(event);
             },
         });
 
@@ -101,10 +99,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
             id: ' create-new-note',
             name: 'Create a New Note',
             callback: () => {
-                let event = new CustomEvent(eventTypes.createNewNote, {
-                    detail: {},
-                });
-                window.dispatchEvent(event);
+                eventBus.emit(eventTypes.createNewNote);
             },
         });
 
@@ -146,22 +141,14 @@ export default class FileTreeAlternativePlugin extends Plugin {
             if (!bookmarkItem) return;
             event.stopImmediatePropagation();
             if (bookmarkItem.type === 'file') {
-                // Dispatch Reveal File Event
-                let customEvent = new CustomEvent(eventTypes.revealFile, {
-                    detail: {
-                        file: this.app.vault.getAbstractFileByPath(bookmarkItem.path),
-                    },
+                eventBus.emit(eventTypes.revealFile, {
+                    file: this.app.vault.getAbstractFileByPath(bookmarkItem.path),
                 });
-                window.dispatchEvent(customEvent);
             } else if (bookmarkItem.type === 'folder') {
                 event.stopImmediatePropagation();
-                // Dispatch Reveal Folder Event
-                let customEvent = new CustomEvent(eventTypes.revealFolder, {
-                    detail: {
-                        folder: this.app.vault.getAbstractFileByPath(bookmarkItem.path),
-                    },
+                eventBus.emit(eventTypes.revealFolder, {
+                    folder: this.app.vault.getAbstractFileByPath(bookmarkItem.path),
                 });
-                window.dispatchEvent(customEvent);
             } else {
                 new Notice('Not a file or folder');
             }
@@ -187,14 +174,11 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     triggerVaultChangeEvent = (file: TAbstractFile, changeType: VaultChange, oldPath?: string) => {
-        let event = new CustomEvent(eventTypes.vaultChange, {
-            detail: {
-                file: file,
-                changeType: changeType,
-                oldPath: oldPath ? oldPath : '',
-            },
+        eventBus.emit(eventTypes.vaultChange, {
+            file: file,
+            changeType: changeType,
+            oldPath: oldPath ? oldPath : '',
         });
-        window.dispatchEvent(event);
     };
 
     onCreate = (file: TAbstractFile) => this.triggerVaultChangeEvent(file, 'create', '');

@@ -35,14 +35,6 @@ export interface ObsidianVaultConfig {
 
 export type VaultChange = 'create' | 'delete' | 'rename' | 'modify';
 
-export class CustomVaultChangeEvent extends Event {
-    detail: {
-        file: TFile;
-        changeType: VaultChange;
-        oldPath: string;
-    };
-}
-
 export const eventTypes = {
     activeFileChange: 'fta-active-file-change',
     refreshView: 'fta-refresh-view',
