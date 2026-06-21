@@ -227,7 +227,7 @@ export function NestedFolders(props: NestedFoldersProps) {
                                 <Tree
                                     plugin={plugin}
                                     content={child.folder.name}
-                                    open={openFolders.contains(child.folder.path)}
+                                    open={openFolders.includes(child.folder.path)}
                                     onClick={() => handleFolderNameClick(child.folder.path)}
                                     onDoubleClick={() => focusOnFolder(child.folder)}
                                     onContextMenu={(e: MouseEvent | TouchEvent) =>

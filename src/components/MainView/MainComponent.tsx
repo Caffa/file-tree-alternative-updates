@@ -53,8 +53,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         if (['Horizontal', 'Vertical'].includes(plugin.settings.evernoteView)) {
             let previousActiveFolder = localStorage.getItem(plugin.keys.activeFolderPathKey);
             if (previousActiveFolder) {
-                let folder = plugin.app.vault.getAbstractFileByPath(previousActiveFolder);
-                if (folder && folder instanceof TFolder) {
+                const folder = plugin.app.vault.getFolderByPath(previousActiveFolder);
+                if (folder) {
                     setActiveFolderPath(folder.path);
                 }
             }
@@ -95,8 +95,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const changeActiveFile = (evt: Event) => {
         // @ts-ignore
         let filePath: string = evt.detail.filePath;
-        let file = plugin.app.vault.getAbstractFileByPath(filePath);
-        if (file) setActiveOzFile(FileTreeUtils.TFile2OZFile(file as TFile));
+        const file = plugin.app.vault.getFileByPath(filePath);
+        if (file) setActiveOzFile(FileTreeUtils.TFile2OZFile(file));
     };
 
     // Initial Load
@@ -128,8 +128,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const setInitialFocusedFolder = () => {
         let localFocusedFolder = localStorage.getItem(plugin.keys.focusedFolder);
         if (localFocusedFolder) {
-            let folder = plugin.app.vault.getAbstractFileByPath(localFocusedFolder);
-            if (folder && folder instanceof TFolder) {
+            const folder = plugin.app.vault.getFolderByPath(localFocusedFolder);
+            if (folder) {
                 setFocusedFolder(folder);
                 return;
             }
@@ -180,7 +180,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         if (localStorageOpenFolders) {
             localStorageOpenFolders = JSON.parse(localStorageOpenFolders);
             for (let folder of localStorageOpenFolders) {
-                let openFolder = plugin.app.vault.getAbstractFileByPath(folder);
+                const openFolder = plugin.app.vault.getFolderByPath(folder);
                 if (openFolder) openFolders.push(openFolder.path);
             }
         }
@@ -194,7 +194,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         if (localStoragePinnedFiles) {
             localStoragePinnedFiles = JSON.parse(localStoragePinnedFiles);
             for (let file of localStoragePinnedFiles) {
-                let pinnedFile = plugin.app.vault.getAbstractFileByPath(file) as TFile;
+                const pinnedFile = plugin.app.vault.getFileByPath(file);
                 if (pinnedFile) pinnedFiles.push(FileTreeUtils.TFile2OZFile(pinnedFile));
             }
         }
@@ -238,7 +238,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         // File Event Handlers
         if (file instanceof TFile) {
             // Update Pinned Files
-            if (['rename', 'delete'].contains(changeType)) {
+            if (['rename', 'delete'].includes(changeType)) {
                 let currentOzPinnedFiles: OZFile[] = [];
                 setOzPinnedFiles((ozPinnedFiles) => {
                     currentOzPinnedFiles = ozPinnedFiles;
@@ -412,7 +412,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
     // --> Handle Reveal Active File Button
     function revealFileInFileTree(ozFileToReveal: OZFile) {
-        const fileToReveal = plugin.app.vault.getAbstractFileByPath(ozFileToReveal.path) as TFile;
+        const fileToReveal = plugin.app.vault.getFileByPath(ozFileToReveal.path);
         if (!fileToReveal) return;
 
         // Get parent folder

@@ -12,10 +12,11 @@ export const getFilesUnderPath = (params: {
     getAllFiles?: boolean;
 }): OZFile[] => {
     const { path, plugin, getAllFiles, excludedExtensions, excludedFolders } = params;
-    var filesUnderPath: OZFile[] = [];
-    var showFilesFromSubFolders = getAllFiles ? true : plugin.settings.showFilesFromSubFolders;
-    var folderObj = plugin.app.vault.getAbstractFileByPath(path);
-    recursiveFx(folderObj as TFolder, plugin.app);
+    const filesUnderPath: OZFile[] = [];
+    const showFilesFromSubFolders = getAllFiles ? true : plugin.settings.showFilesFromSubFolders;
+    const folderObj = plugin.app.vault.getFolderByPath(path);
+    if (!folderObj) return filesUnderPath;
+    recursiveFx(folderObj, plugin.app);
     function recursiveFx(folderObj: TFolder, app: App) {
         if (folderObj instanceof TFolder && folderObj.children) {
             for (let child of folderObj.children) {
@@ -69,7 +70,7 @@ export const createFolderTree = (params: { startFolder: TFolder; excludedFolders
                 let childFolder: TFolder = child as TFolder;
                 if (
                     (plugin.settings.hideAttachments && childFolder.name === plugin.settings.attachmentsFolderName) ||
-                    (excludedFolders.length > 0 && excludedFolders.contains(child.path))
+                    (excludedFolders.length > 0 && excludedFolders.includes(child.path))
                 ) {
                     continue;
                 }
@@ -122,7 +123,7 @@ export const hasChildFolder = (folder: TFolder): boolean => {
 
 // Files out of Md should be listed with extension badge - Md without extension
 export const getFileNameAndExtension = (fullName: string) => {
-    var index = fullName.lastIndexOf('.');
+    const index = fullName.lastIndexOf('.');
     return {
         fileName: fullName.substring(0, index),
         extension: fullName.substring(index + 1),
@@ -176,7 +177,7 @@ export const openInternalLink = (event: React.MouseEvent<Element, MouseEvent>, l
 };
 
 export const pluginIsLoaded = (app: App, pluginId: string) => {
-    // @ts-ignore
+    // @ts-ignore - getPlugin exists at runtime
     return app.plugins.getPlugin(pluginId);
 };
 
@@ -185,13 +186,14 @@ export const platformIsMobile = () => {
 };
 
 export const createNewFile = async (e: React.MouseEvent | null, folderPath: string, plugin: FileTreeAlternativePlugin) => {
-    let targetFolder = plugin.app.vault.getAbstractFileByPath(folderPath);
+    const targetFolder = plugin.app.vault.getFolderByPath(folderPath);
     if (!targetFolder) return;
-    let modal = new VaultChangeModal(plugin, targetFolder, 'create note');
+    const modal = new VaultChangeModal(plugin, targetFolder, 'create note');
     modal.open();
 };
 
 export const getBookmarksPluginItems = (): BookmarksPluginItem[] => {
+    // @ts-ignore - global 'app' is provided by Obsidian at runtime
     return (app as any).internalPlugins.plugins['bookmarks'].instance.items as BookmarksPluginItem[];
 };
 

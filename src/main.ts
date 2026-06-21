@@ -108,11 +108,11 @@ export default class FileTreeAlternativePlugin extends Plugin {
             },
         });
 
-        // Add event listener for vault changes
-        this.app.vault.on('create', this.onCreate);
-        this.app.vault.on('delete', this.onDelete);
-        this.app.vault.on('modify', this.onModify);
-        this.app.vault.on('rename', this.onRename);
+        // Add event listeners for vault changes (using registerEvent for proper cleanup)
+        this.registerEvent(this.app.vault.on('create', this.onCreate));
+        this.registerEvent(this.app.vault.on('delete', this.onDelete));
+        this.registerEvent(this.app.vault.on('modify', this.onModify));
+        this.registerEvent(this.app.vault.on('rename', this.onRename));
 
         // Ribbon Icon For Opening
         this.refreshIconRibbon();
@@ -121,11 +121,6 @@ export default class FileTreeAlternativePlugin extends Plugin {
     onunload() {
         console.log('Unloading Alternative File Tree Plugin');
         this.detachFileTreeLeafs();
-        // Remove event listeners
-        this.app.vault.off('create', this.onCreate);
-        this.app.vault.off('delete', this.onDelete);
-        this.app.vault.off('modify', this.onModify);
-        this.app.vault.off('rename', this.onRename);
         this.bookmarksRemoveEventListener();
     }
 
@@ -222,13 +217,15 @@ export default class FileTreeAlternativePlugin extends Plugin {
      * on mobile when workspace restoration and plugin initialization race.
      */
     deduplicateFileTreeLeaves = () => {
-        let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+        const leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
         if (leafs.length > 1) {
             // Keep the first leaf, destroy and detach extras
             for (let i = 1; i < leafs.length; i++) {
-                const view = leafs[i].view as FileTreeView;
-                if (view && view.destroy) view.destroy();
-                leafs[i].detach();
+                const leaf = leafs[i];
+                if (leaf.view instanceof FileTreeView) {
+                    leaf.view.destroy();
+                }
+                leaf.detach();
             }
         }
     };
@@ -264,9 +261,11 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     detachFileTreeLeafs = () => {
-        let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
-        for (let leaf of leafs) {
-            (leaf.view as FileTreeView).destroy();
+        const leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+        for (const leaf of leafs) {
+            if (leaf.view instanceof FileTreeView) {
+                leaf.view.destroy();
+            }
             leaf.detach();
         }
     };

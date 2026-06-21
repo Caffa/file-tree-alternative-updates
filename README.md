@@ -1,5 +1,11 @@
 # Obsidian File Tree Alternative Plugin
 
+> **⚠️ Fork Notice**
+>
+> This is a fork of [ozntel/file-tree-alternative](https://github.com/ozntel/file-tree-alternative).
+>
+> The upstream repository has not been updated in two years. This fork exists to maintain bug fixes, primarily addressing an issue where multiple panes remain open after the Obsidian mobile app restarts.
+
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/ozntel/file-tree-alternative?style=for-the-badge)
 ![GitHub all releases](https://img.shields.io/github/downloads/ozntel/file-tree-alternative/total?style=for-the-badge)
 

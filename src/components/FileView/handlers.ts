@@ -30,21 +30,21 @@ const getFilesWithName = (params: {
     excludedFolders: string[];
     getAllFiles?: boolean;
 }): OZFile[] => {
-    let { searchPhrase, searchFolder, plugin, getAllFiles, excludedExtensions, excludedFolders } = params;
-    var files: OZFile[] = Util.getFilesUnderPath({
+    const { searchPhrase, searchFolder, plugin, getAllFiles, excludedExtensions, excludedFolders } = params;
+    const files: OZFile[] = Util.getFilesUnderPath({
         path: searchFolder,
         plugin: plugin,
         excludedExtensions: excludedExtensions,
         excludedFolders: excludedFolders,
         getAllFiles: getAllFiles,
     });
-    var filteredFiles = files.filter((file) => file.basename.toLowerCase().includes(searchPhrase.toLowerCase().trimStart()));
+    const filteredFiles = files.filter((file) => file.basename.toLowerCase().includes(searchPhrase.toLowerCase().trimStart()));
     return filteredFiles;
 };
 
 const getFileTags = (params: { f: OZFile; plugin: FileTreeAlternativePlugin }): string[] => {
     let { f, plugin } = params;
-    let mdFile = plugin.app.vault.getAbstractFileByPath(f.path) as TFile;
+    const mdFile = plugin.app.vault.getFileByPath(f.path);
     if (!mdFile) return [];
     let fileCache = plugin.app.metadataCache.getFileCache(mdFile);
     let fileTags: string[] = [];
@@ -91,7 +91,7 @@ const getFilesWithTag = (params: {
             plugin: plugin,
         });
         for (let fileTag of fileTags) {
-            if (fileTag.toLowerCase().contains(searchTag.toLowerCase().trimStart())) {
+            if (fileTag.toLowerCase().includes(searchTag.toLowerCase().trimStart())) {
                 if (!filesWithTag.has(ozFile)) filesWithTag.add(ozFile);
             }
         }
@@ -197,9 +197,10 @@ export const handleSearch = (params: {
     focusedFolder: TFolder;
 }) => {
     let { e, activeFolderPath, setSearchPhrase, setOzFileList, setTreeHeader, plugin, focusedFolder, excludedExtensions, excludedFolders } = params;
-    var searchPhrase = e.target.value;
-    setSearchPhrase(searchPhrase);
-    var searchFolder = activeFolderPath;
+    const inputValue = e.target.value;
+    setSearchPhrase(inputValue);
+    let searchPhrase = inputValue;
+    let searchFolder = activeFolderPath;
 
     // Check Tag Regex in Search Phrase
     let tagRegexMatch = searchPhrase.match(searchTagRegex);
@@ -261,9 +262,9 @@ export const getFileIcon = (params: { file: OZFile }) => {
     let { file } = params;
     return file.extension === 'pdf'
         ? Icons.AiFillFilePdf
-        : ['png', 'jpg', 'jpeg', 'svg'].contains(file.extension)
+        : ['png', 'jpg', 'jpeg', 'svg'].includes(file.extension)
         ? Icons.AiFillFileImage
-        : ['doc', 'docx'].contains(file.extension)
+        : ['doc', 'docx'].includes(file.extension)
         ? Icons.AiFillFileWord
         : Icons.BiFile;
 };
@@ -397,9 +398,9 @@ export const triggerContextMenu = (params: {
         menuItem.setTitle('Make a copy');
         menuItem.setIcon('documents');
         menuItem.onClick((ev: MouseEvent) => {
-            let fileToCopy = plugin.app.vault.getAbstractFileByPath(file.path);
+            const fileToCopy = plugin.app.vault.getFileByPath(file.path);
             if (fileToCopy) {
-                plugin.app.vault.copy(fileToCopy as TFile, `${file.parent.path}/${file.basename} 1.${file.extension}`);
+                plugin.app.vault.copy(fileToCopy, `${file.parent.path}/${file.basename} 1.${file.extension}`);
             }
         });
     });

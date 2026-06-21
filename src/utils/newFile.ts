@@ -6,14 +6,14 @@ import { eventTypes, OZFile } from 'utils/types';
 
 export const openFile = (props: { file: OZFile; app: App; newLeaf: boolean; leafBySplit?: boolean }) => {
     const { file, app, newLeaf, leafBySplit } = props;
-    let fileToOpen = app.vault.getAbstractFileByPath(file.path);
+    const fileToOpen = app.vault.getFileByPath(file.path);
     if (!fileToOpen) return;
-    let leaf = app.workspace.getLeaf(newLeaf);
-    if (leafBySplit) leaf = app.workspace.createLeafBySplit(leaf, 'vertical');
-    app.workspace.setActiveLeaf(leaf, {
+    const leaf = app.workspace.getLeaf(newLeaf);
+    const targetLeaf = leafBySplit ? app.workspace.createLeafBySplit(leaf, 'vertical') : leaf;
+    app.workspace.setActiveLeaf(targetLeaf, {
         focus: true,
     });
-    leaf.openFile(fileToOpen as TFile, { eState: { focus: true } });
+    targetLeaf.openFile(fileToOpen, { eState: { focus: true } });
 };
 
 export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin; fileName: string }): string => {
@@ -34,7 +34,7 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
 };
 
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
-    // @ts-ignore
+    // @ts-ignore - createNewMarkdownFile exists at runtime but is not in public type defs
     const newFile = await plugin.app.fileManager.createNewMarkdownFile(folder, newFileName);
     if (content && content !== '') await plugin.app.vault.modify(newFile, content);
     openFile({ file: newFile, app: plugin.app, newLeaf: false });
