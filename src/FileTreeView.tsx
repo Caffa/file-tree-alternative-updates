@@ -3,7 +3,7 @@ import React from 'react';
 import { Root, createRoot } from 'react-dom/client';
 import FileTreeAlternativePlugin from './main';
 import MainTreeComponent from './components/MainView/MainComponent';
-import { RecoilRoot } from 'recoil';
+
 
 export class FileTreeView extends ItemView {
     plugin: FileTreeAlternativePlugin;
@@ -45,9 +45,7 @@ export class FileTreeView extends ItemView {
         this.root = createRoot(this.contentEl);
         this.root.render(
             <div className="file-tree-plugin-view">
-                <RecoilRoot>
-                    <MainTreeComponent fileTreeView={this} plugin={this.plugin} />
-                </RecoilRoot>
+                <MainTreeComponent fileTreeView={this} plugin={this.plugin} />
             </div>
         );
     }

@@ -2,8 +2,7 @@ import React from 'react';
 import Tree from 'components/FolderView/treeComponent/TreeComponent';
 import FileTreeAlternativePlugin from 'main';
 import ConditionalRootFolderWrapper from 'components/FolderView/ConditionalWrapper';
-import { useRecoilState } from 'recoil';
-import * as recoilState from '../../recoil/pluginState';
+import { usePluginStore } from '../../recoil/pluginStore';
 import { NestedFolders } from 'components/FolderView/NestedFolders';
 import { TFolder, Menu } from 'obsidian';
 import { VaultChangeModal } from 'modals';
@@ -22,11 +21,12 @@ export function MainFolder(props: FolderProps) {
     const app = plugin.app;
     const rootFolder = app.vault.getRoot();
 
-    // Global States
-    const [_activeFolderPath, setActiveFolderPath] = useRecoilState(recoilState.activeFolderPath);
-    const [folderTree] = useRecoilState(recoilState.folderTree);
-    const [focusedFolder, setFocusedFolder] = useRecoilState(recoilState.focusedFolder);
-    const [_openFolders, setOpenFolders] = useRecoilState(recoilState.openFolders);
+    // Global States (Zustand)
+    const setActiveFolderPath = usePluginStore((s) => s.setActiveFolderPath);
+    const folderTree = usePluginStore((s) => s.folderTree);
+    const focusedFolder = usePluginStore((s) => s.focusedFolder);
+    const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
+    const setOpenFolders = usePluginStore((s) => s.setOpenFolders);
 
     // Force Update
     const forceUpdate = useForceUpdate();

@@ -2,8 +2,7 @@ import { TFolder, Notice } from 'obsidian';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import FileTreeAlternativePlugin from 'main';
 import { getFolderIcon, IoMdArrowDropright } from 'utils/icons';
-import * as recoilState from '../../../recoil/pluginState';
-import { useRecoilState } from 'recoil';
+import { usePluginStore } from '../../../recoil/pluginStore';
 import useLongPress from 'hooks/useLongPress';
 
 type TreeProps = {
@@ -21,10 +20,11 @@ type TreeProps = {
 };
 
 export default function Tree(props: TreeProps) {
-    // Global States
-    const [openFolders, setOpenFolders] = useRecoilState(recoilState.openFolders);
-    const [folderFileCountMap] = useRecoilState(recoilState.folderFileCountMap);
-    const [activeFolderPath] = useRecoilState(recoilState.activeFolderPath);
+    // Global States (Zustand)
+    const openFolders = usePluginStore((s) => s.openFolders);
+    const setOpenFolders = usePluginStore((s) => s.setOpenFolders);
+    const folderFileCountMap = usePluginStore((s) => s.folderFileCountMap);
+    const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
 
     const longPressEvents = useLongPress((e: React.TouchEvent) => {
         props.onContextMenu(e);

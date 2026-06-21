@@ -3,8 +3,7 @@ import * as Icons from 'utils/icons';
 import FileTreeAlternativePlugin from 'main';
 import { OZFile } from 'utils/types';
 import * as Util from 'utils/Utils';
-import * as recoilState from '../../recoil/pluginState';
-import { useRecoilState } from 'recoil';
+import { usePluginStore } from '../../recoil/pluginStore';
 import useForceUpdate from 'hooks/ForceUpdate';
 import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
@@ -41,15 +40,18 @@ export function FileComponent(props: FilesProps) {
     let searchInput = React.useRef<HTMLInputElement>(null);
     const plugin = props.plugin;
 
-    // States Coming From Main Component
-    const [_view, setView] = useRecoilState(recoilState.view);
-    const [ozFileList, setOzFileList] = useRecoilState(recoilState.ozFileList);
-    const [ozPinnedFiles] = useRecoilState(recoilState.ozPinnedFileList);
-    const [activeFolderPath, setActiveFolderPath] = useRecoilState(recoilState.activeFolderPath);
-    const [excludedExtensions] = useRecoilState(recoilState.excludedExtensions);
-    const [excludedFolders] = useRecoilState(recoilState.excludedFolders);
-    const [showSubFolders, setShowSubFolders] = useRecoilState(recoilState.showSubFolders);
-    const [focusedFolder, _setFocusedFolder] = useRecoilState(recoilState.focusedFolder);
+    // States Coming From Main Component (Zustand)
+    const setView = usePluginStore((s) => s.setView);
+    const ozFileList = usePluginStore((s) => s.ozFileList);
+    const setOzFileList = usePluginStore((s) => s.setOzFileList);
+    const ozPinnedFiles = usePluginStore((s) => s.ozPinnedFileList);
+    const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
+    const setActiveFolderPath = usePluginStore((s) => s.setActiveFolderPath);
+    const excludedExtensions = usePluginStore((s) => s.excludedExtensions);
+    const excludedFolders = usePluginStore((s) => s.excludedFolders);
+    const showSubFolders = usePluginStore((s) => s.showSubFolders);
+    const setShowSubFolders = usePluginStore((s) => s.setShowSubFolders);
+    const focusedFolder = usePluginStore((s) => s.focusedFolder);
 
     // Local States
     const [highlight, setHighlight] = useState<boolean>(false);
@@ -333,8 +335,10 @@ export function FileComponent(props: FilesProps) {
 const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin }) => {
     const { file, plugin } = props;
 
-    const [ozPinnedFiles, setOzPinnedFiles] = useRecoilState(recoilState.ozPinnedFileList);
-    const [activeOzFile, setActiveOzFile] = useRecoilState(recoilState.activeOZFile);
+    const ozPinnedFiles = usePluginStore((s) => s.ozPinnedFileList);
+    const setOzPinnedFiles = usePluginStore((s) => s.setOzPinnedFileList);
+    const activeOzFile = usePluginStore((s) => s.activeOZFile);
+    const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
 
     const [hoverActive, setHoverActive] = useState<boolean>(false);
 

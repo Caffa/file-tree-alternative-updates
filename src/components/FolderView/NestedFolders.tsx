@@ -3,8 +3,7 @@ import { TFolder, Menu } from 'obsidian';
 import { FolderTree } from 'utils/types';
 import FileTreeAlternativePlugin from 'main';
 import Tree from 'components/FolderView/treeComponent/TreeComponent';
-import { useRecoilState } from 'recoil';
-import * as recoilState from '../../recoil/pluginState';
+import { usePluginStore } from '../../recoil/pluginStore';
 import * as Util from 'utils/Utils';
 import { VaultChangeModal, MoveSuggestionModal, ConfirmationModal } from 'modals';
 import * as newFileUtils from 'utils/newFile';
@@ -19,13 +18,16 @@ export function NestedFolders(props: NestedFoldersProps) {
     const app = plugin.app;
     let rootFolder = app.vault.getRoot();
 
-    // Global States
-    const [openFolders] = useRecoilState(recoilState.openFolders);
-    const [activeFolderPath, setActiveFolderPath] = useRecoilState(recoilState.activeFolderPath);
-    const [excludedFolders, setExcludedFolders] = useRecoilState(recoilState.excludedFolders);
-    const [focusedFolder, setFocusedFolder] = useRecoilState(recoilState.focusedFolder);
-    const [folderFileCountMap] = useRecoilState(recoilState.folderFileCountMap);
-    const [_view, setView] = useRecoilState(recoilState.view);
+    // Global States (Zustand)
+    const openFolders = usePluginStore((s) => s.openFolders);
+    const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
+    const setActiveFolderPath = usePluginStore((s) => s.setActiveFolderPath);
+    const excludedFolders = usePluginStore((s) => s.excludedFolders);
+    const setExcludedFolders = usePluginStore((s) => s.setExcludedFolders);
+    const focusedFolder = usePluginStore((s) => s.focusedFolder);
+    const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
+    const folderFileCountMap = usePluginStore((s) => s.folderFileCountMap);
+    const setView = usePluginStore((s) => s.setView);
 
     const handleFolderNameClick = (folderPath: string) => setActiveFolderPath(folderPath);
 

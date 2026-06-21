@@ -5,7 +5,7 @@ import { eventBus } from 'utils/eventBus';
 import * as Util from 'utils/Utils';
 import { TFile, TFolder } from 'obsidian';
 import * as newFileUtils from 'utils/newFile';
-import { SetterOrUpdater } from 'recoil';
+
 import * as Icons from 'utils/icons';
 import { Menu } from 'obsidian';
 import { isMouseEvent } from 'hooks/useLongPress';
@@ -188,7 +188,7 @@ export const handleSearch = (params: {
     activeFolderPath: string;
     setSearchPhrase: React.Dispatch<React.SetStateAction<string>>;
     setTreeHeader: React.Dispatch<React.SetStateAction<string>>;
-    setOzFileList: SetterOrUpdater<OZFile[]>;
+    setOzFileList: (list: OZFile[]) => void;
     excludedExtensions: string[];
     excludedFolders: string[];
     plugin: FileTreeAlternativePlugin;
@@ -245,7 +245,7 @@ export const handleSearch = (params: {
 // ----> NAV FILE COMPONENT HANDLERS <----- \\
 
 // Handle Click Event on File - Allows Open with Cmd/Ctrl
-export const openFile = (params: { file: OZFile; e: React.MouseEvent; plugin: FileTreeAlternativePlugin; setActiveOzFile: SetterOrUpdater<OZFile> }) => {
+export const openFile = (params: { file: OZFile; e: React.MouseEvent; plugin: FileTreeAlternativePlugin; setActiveOzFile: (file: OZFile) => void }) => {
     let { file, e, plugin, setActiveOzFile } = params;
     newFileUtils.openFile({
         file: file,
@@ -313,7 +313,7 @@ export const triggerContextMenu = (params: {
     file: OZFile;
     e: React.MouseEvent | React.TouchEvent;
     ozPinnedFiles: OZFile[];
-    setOzPinnedFiles: SetterOrUpdater<OZFile[]>;
+    setOzPinnedFiles: (list: OZFile[]) => void;
     plugin: FileTreeAlternativePlugin;
 }) => {
     let { file, e, ozPinnedFiles, setOzPinnedFiles, plugin } = params;
