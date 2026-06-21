@@ -168,8 +168,7 @@ export const getBreadcrumbSegments = (folderPath: string, app: App): { label: st
 };
 
 export const internalPluginLoaded = (pluginName: string, app: App) => {
-    // @ts-ignore
-    return app.internalPlugins.plugins[pluginName]?._loaded;
+    return (app as any).internalPlugins.plugins[pluginName]?._loaded;
 };
 
 export const openInternalLink = (event: React.MouseEvent<Element, MouseEvent>, link: string, app: App) => {
@@ -177,8 +176,7 @@ export const openInternalLink = (event: React.MouseEvent<Element, MouseEvent>, l
 };
 
 export const pluginIsLoaded = (app: App, pluginId: string) => {
-    // @ts-ignore - getPlugin exists at runtime
-    return app.plugins.getPlugin(pluginId);
+    return (app as any).plugins.getPlugin(pluginId);
 };
 
 export const platformIsMobile = () => {
@@ -192,8 +190,10 @@ export const createNewFile = async (e: React.MouseEvent | null, folderPath: stri
     modal.open();
 };
 
+// Global 'app' is provided by Obsidian at runtime (not imported)
+declare const app: App;
+
 export const getBookmarksPluginItems = (): BookmarksPluginItem[] => {
-    // @ts-ignore - global 'app' is provided by Obsidian at runtime
     return (app as any).internalPlugins.plugins['bookmarks'].instance.items as BookmarksPluginItem[];
 };
 

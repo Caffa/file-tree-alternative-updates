@@ -42,8 +42,7 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
 };
 
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
-    // @ts-ignore - createNewMarkdownFile exists at runtime but is not in public type defs
-    const newFile = await plugin.app.fileManager.createNewMarkdownFile(folder, newFileName);
+    const newFile = await (plugin.app.fileManager as any).createNewMarkdownFile(folder, newFileName);
     if (content && content !== '') await plugin.app.vault.modify(newFile, content);
     openFile({ file: newFile, app: plugin.app, newLeaf: false });
     eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });

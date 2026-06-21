@@ -420,8 +420,8 @@ export const triggerContextMenu = (params: {
     if (isMouseEvent(e)) {
         fileMenu.showAtPosition({ x: e.pageX, y: e.pageY });
     } else {
-        // @ts-ignore
-        fileMenu.showAtPosition({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY });
+        const touchEvent = e.nativeEvent as any;
+        fileMenu.showAtPosition({ x: touchEvent.locationX, y: touchEvent.locationY });
     }
     return false;
 };
