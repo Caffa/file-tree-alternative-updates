@@ -106,7 +106,7 @@ export function MainFolder(props: FolderProps) {
 
         const changeSortSettingTo = (newValue: FolderSortType) => {
             plugin.settings.sortFoldersBy = newValue;
-            plugin.saveSettings();
+            plugin.debouncedSaveSettings();
             forceUpdate();
         };
 

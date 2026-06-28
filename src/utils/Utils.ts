@@ -112,6 +112,39 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin) => {
     return counts;
 };
 
+/** Incremental folder count update: add or remove a single file from the count map without rebuilding everything.
+ *  @param map - existing count map (will be mutated and returned)
+ *  @param file - the file being created or deleted
+ *  @param delta - +1 for create, -1 for delete
+ *  @param folderNote - whether folder notes are being filtered (same as settings.folderNote)
+ *  @param folderCountOption - 'notes' or 'files'
+ */
+export const incrementFolderCountMap = (
+    map: FolderFileCountMap,
+    file: TFile,
+    delta: 1 | -1,
+    folderNote: boolean,
+    folderCountOption: string
+): FolderFileCountMap => {
+    // Skip folder note files if folderNote setting is on
+    if (folderNote && file.extension === 'md' && file.basename === file.parent.name) {
+        return map;
+    }
+    // Skip non-md files if folderCountOption is 'notes'
+    if (folderCountOption === 'notes' && file.extension !== 'md') {
+        return map;
+    }
+
+    for (let folder = file.parent; folder != null; folder = folder.parent) {
+        if (!map[folder.path]) map[folder.path] = { open: 0, closed: 0 };
+        // Open count: only direct parent
+        if (folder == file.parent) map[folder.path].open += delta;
+        // Closed count: all ancestors
+        map[folder.path].closed += delta;
+    }
+    return map;
+};
+
 // Check if folder has child folder
 export const hasChildFolder = (folder: TFolder): boolean => {
     let children = folder.children;
@@ -178,6 +211,23 @@ export const openInternalLink = (event: React.MouseEvent<Element, MouseEvent>, l
 export const pluginIsLoaded = (app: App, pluginId: string) => {
     return (app as any).plugins.getPlugin(pluginId);
 };
+
+/** Simple debounce: returns a function that delays invoking `fn` until `delay` ms have elapsed since the last call. */
+export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T & { cancel: () => void } {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounced = (...args: any[]) => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+            fn(...args);
+            timer = null;
+        }, delay);
+    };
+    debounced.cancel = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+    };
+    return debounced as T & { cancel: () => void };
+}
 
 export const platformIsMobile = () => {
     return Platform.isMobile;

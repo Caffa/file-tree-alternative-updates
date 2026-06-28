@@ -1,5 +1,5 @@
 import { TAbstractFile, TFile, TFolder, Notice } from 'obsidian';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { FileComponent } from 'components/FileView/FileComponent';
 import { MainFolder } from 'components/FolderView/MainFolder';
 import { SingleViewVertical, SingleViewHorizontal } from 'components/MainView/SingleView';
@@ -45,6 +45,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
     const activeOZFile = usePluginStore((s) => s.activeOZFile);
     const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
+
+    // Ref to gate scroll-to-file: only true when user explicitly reveals a file
+    const needsScrollRef = useRef(false);
 
     const setNewFileList = (folderPath?: string) => {
         let filesPath = folderPath ? folderPath : activeFolderPath;
@@ -226,7 +229,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // Save Excluded Folders to Settings as String
     function saveExcludedFoldersToSettings() {
         plugin.settings.excludedFolders = excludedFolders.length > 1 ? excludedFolders.join(', ') : excludedFolders[0];
-        plugin.saveSettings();
+        plugin.debouncedSaveSettings();
     }
 
     // Function for Event Handlers
@@ -300,7 +303,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                         setOzFileList([...currentFileList, FileTreeUtils.TFile2OZFile(file)]);
                     }
                 } else if (changeType === 'create') {
-                    let fileIsCreatedUnderActiveFolder = file.path.match(new RegExp(currentActiveFolderPath + '.*'));
+                    // Use startsWith instead of regex — faster and avoids regex-special-char bugs in folder names
+                    let fileIsCreatedUnderActiveFolder =
+                        currentActiveFolderPath === '/' || file.path.startsWith(currentActiveFolderPath + '/');
                     if (fileIsCreatedUnderActiveFolder) {
                         // If file is not already in the list, add into view
                         if (!currentFileList.some((f) => f.path === file.path)) {
@@ -321,16 +326,35 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             }
         }
 
-        // After Each Vault Change Folder Count Map to Be Updated
+        // Update folder counts incrementally (avoids O(n) full rebuild on every event)
         if (plugin.settings.folderCount && changeType !== 'modify') {
-            setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+            if (changeType === 'rename' || file instanceof TFolder) {
+                // Full rebuild for renames (file path changes) and folder events
+                setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+            } else if (file instanceof TFile) {
+                // Incremental: +1 for create, -1 for delete
+                const delta = changeType === 'create' ? 1 : -1;
+                const currentMap = usePluginStore.getState().folderFileCountMap;
+                setFolderFileCountMap(
+                    FileTreeUtils.incrementFolderCountMap(
+                        { ...currentMap },
+                        file,
+                        delta,
+                        plugin.settings.folderNote,
+                        plugin.settings.folderCountOption
+                    )
+                );
+            }
         }
     }
 
     // ******** REVEAL ACTIVE FILE FUNCTIONS ******** //
-    // --> During file list change, it will scroll to the active file element
+    // --> During file list change, scroll only when a user explicitly revealed a file
     useEffect(() => {
-        if (activeOZFile && ozFileList.length > 0) scrollToFile(activeOZFile);
+        if (needsScrollRef.current && activeOZFile && ozFileList.length > 0) {
+            scrollToFile(activeOZFile);
+            needsScrollRef.current = false;
+        }
     }, [ozFileList]);
 
     // Custom Event Handler Function
@@ -410,6 +434,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             const foldersToOpen = getAllFoldersToOpen(fileToReveal);
             let openFoldersSet = new Set([...openFolders, ...foldersToOpen]);
             setOpenFolders(Array.from(openFoldersSet));
+
+            // Flag that active scroll is needed — prevents layout thrashing on routine updates
+            needsScrollRef.current = true;
 
             scrollToFile(FileTreeUtils.TFile2OZFile(fileToReveal));
             scrollToFolder(parentFolder);

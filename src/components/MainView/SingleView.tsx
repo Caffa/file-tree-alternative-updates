@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import FileTreeAlternativePlugin from 'main';
 import { MainFolder } from 'components/FolderView/MainFolder';
 import { FileComponent } from 'components/FileView/FileComponent';
@@ -15,11 +15,10 @@ export const SingleViewVertical = (props: { plugin: FileTreeAlternativePlugin })
 
     let heightSetting = localStorage.getItem(plugin.keys.customHeightKey);
 
-    useEffect(() => {
-        if (folderPaneHeight) {
-            localStorage.setItem(plugin.keys.customHeightKey, folderPaneHeight.toString());
-        }
-    }, [folderPaneHeight]);
+    // Save final divider position only on mouseup (avoid per-pixel localStorage writes)
+    const saveDividerPosition = (height: number) => {
+        localStorage.setItem(plugin.keys.customHeightKey, height.toString());
+    };
 
     function touchMouseStart(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
         if (e.type !== 'drag' && (e.target as Element).id !== 'file-tree-divider') return;
@@ -42,6 +41,8 @@ export const SingleViewVertical = (props: { plugin: FileTreeAlternativePlugin })
         e.preventDefault();
         setDividerOnMove(false);
         setClientY(e.nativeEvent.clientY);
+        // Write to localStorage once on release instead of on every pixel of drag
+        saveDividerPosition(folderPaneHeight + (e.nativeEvent.clientY - clientY));
     }
 
     return (
@@ -81,11 +82,10 @@ export const SingleViewHorizontal = (props: { plugin: FileTreeAlternativePlugin 
 
     let widthSetting = localStorage.getItem(plugin.keys.customWidthKey);
 
-    useEffect(() => {
-        if (folderPaneWidth) {
-            localStorage.setItem(plugin.keys.customWidthKey, folderPaneWidth.toString());
-        }
-    }, [folderPaneWidth]);
+    // Save final divider position only on mouseup (avoid per-pixel localStorage writes)
+    const saveDividerPosition = (width: number) => {
+        localStorage.setItem(plugin.keys.customWidthKey, width.toString());
+    };
 
     function touchMouseStart(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
         if (e.type !== 'drag' && (e.target as Element).id !== 'file-tree-divider-horizontal') return;
@@ -108,6 +108,8 @@ export const SingleViewHorizontal = (props: { plugin: FileTreeAlternativePlugin 
         e.preventDefault();
         setDividerOnMove(false);
         setClientX(e.nativeEvent.clientX);
+        // Write to localStorage once on release instead of on every pixel of drag
+        saveDividerPosition(folderPaneWidth + (e.nativeEvent.clientX - clientX));
     }
 
     return (

@@ -7,6 +7,7 @@ import { usePluginStore } from '../../recoil/pluginStore';
 import useForceUpdate from 'hooks/ForceUpdate';
 import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
+import { TFolder } from 'obsidian';
 
 /** Lightweight lazy-load using IntersectionObserver. Replaces react-lazy-load. */
 function LazyLoad({ children, height }: { children: React.ReactNode; height: number }) {
@@ -88,6 +89,54 @@ export function FileComponent(props: FilesProps) {
         if (searchBoxVisible) searchInput.current.focus();
     }, [searchBoxVisible]);
 
+    // --- Debounced Search ---
+    // Mutable ref holding latest search params (avoids stale closures in debounced callback)
+    const searchParamsRef = useRef({
+        activeFolderPath,
+        setSearchPhrase,
+        setTreeHeader,
+        setOzFileList,
+        excludedExtensions,
+        excludedFolders,
+        plugin,
+        focusedFolder: focusedFolder as TFolder | null,
+    });
+    searchParamsRef.current = {
+        activeFolderPath,
+        setSearchPhrase,
+        setTreeHeader,
+        setOzFileList,
+        excludedExtensions,
+        excludedFolders,
+        plugin,
+        focusedFolder,
+    };
+
+    // Stable debounced search — fires 300ms after the user stops typing
+    const debouncedSearch = useMemo(
+        () =>
+            Util.debounce((value: string) => {
+                const p = searchParamsRef.current;
+                // Only call handleSearch if there's a focusedFolder — guard against null
+                if (!p.focusedFolder) return;
+                FileViewHandlers.handleSearch({
+                    e: { target: { value } } as React.ChangeEvent<HTMLInputElement>,
+                    activeFolderPath: p.activeFolderPath,
+                    setSearchPhrase: p.setSearchPhrase,
+                    setTreeHeader: p.setTreeHeader,
+                    setOzFileList: p.setOzFileList,
+                    excludedExtensions: p.excludedExtensions,
+                    excludedFolders: p.excludedFolders,
+                    plugin: p.plugin,
+                    focusedFolder: p.focusedFolder,
+                });
+            }, 300),
+        []
+    );
+
+    // Cancel pending debounce on unmount
+    useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
     const filesToList: OZFile[] = useMemo(
         () =>
             FileViewHandlers.sortedFiles({
@@ -118,9 +167,9 @@ export function FileComponent(props: FilesProps) {
         );
     };
 
-    const toggleShowSubFolders = async () => {
+    const toggleShowSubFolders = () => {
         plugin.settings.showFilesFromSubFolders = !showSubFolders;
-        await plugin.saveSettings();
+        plugin.debouncedSaveSettings();
         setShowSubFolders(!showSubFolders);
     };
 
@@ -255,17 +304,7 @@ export function FileComponent(props: FilesProps) {
                                     ref={searchInput}
                                     value={searchPhrase}
                                     onChange={(e) => {
-                                        FileViewHandlers.handleSearch({
-                                            e,
-                                            plugin,
-                                            activeFolderPath,
-                                            setSearchPhrase,
-                                            setTreeHeader,
-                                            setOzFileList,
-                                            excludedExtensions,
-                                            excludedFolders,
-                                            focusedFolder,
-                                        });
+                                        debouncedSearch(e.target.value);
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape') {

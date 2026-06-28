@@ -127,6 +127,18 @@ export default class FileTreeAlternativePlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
+    /** Debounced version of saveSettings — batches rapid sequential setting changes into a single write. */
+    debouncedSaveSettings = (() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        return () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                this.saveData(this.settings);
+                timer = null;
+            }, 100);
+        };
+    })();
+
     bookmarksEventHandler = (event: Event) => {
         // Find the tree-item that includes the bookmarks plugin title
         let treeItem: Element = (event.target as any).closest('.tree-item');

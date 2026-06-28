@@ -146,7 +146,7 @@ export const sortFileListClickHandle = (params: { e: React.MouseEvent; plugin: F
 
     const changeSortSettingTo = (newValue: SortType) => {
         plugin.settings.sortFilesBy = newValue;
-        plugin.saveSettings();
+        plugin.debouncedSaveSettings();
         forceUpdate();
     };
 
@@ -171,7 +171,7 @@ export const sortFileListClickHandle = (params: { e: React.MouseEvent; plugin: F
         menuItem.setIcon(plugin.settings.sortReverse ? 'checkmark' : 'spaceIcon');
         menuItem.onClick(() => {
             plugin.settings.sortReverse = !plugin.settings.sortReverse;
-            plugin.saveSettings();
+            plugin.debouncedSaveSettings();
             forceUpdate();
         });
     });
