@@ -1,4 +1,4 @@
-import { Plugin, addIcon, TAbstractFile, Notice } from 'obsidian';
+import { Plugin, addIcon, TAbstractFile, TFolder, Notice } from 'obsidian';
 import { FileTreeView } from './FileTreeView';
 import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } from './utils/icons';
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
@@ -73,6 +73,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
             }
         });
 
+        this.app.workspace.onLayoutReady(() => {
+            if (this.settings.interceptNativeBreadcrumb) {
+                this.breadcrumbAddEventListener();
+            }
+        });
+
         // Add Command to Reveal Active File
         this.addCommand({
             id: 'reveal-active-file',
@@ -111,12 +117,30 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
         // Ribbon Icon For Opening
         this.refreshIconRibbon();
+
+        // Expose a small public API for inter-plugin integration.
+        // Other plugins (e.g. Current Folder Notes) can call
+        //   window['file-tree-alternative'].revealFolder(path)
+        //   window['file-tree-alternative'].openView()
+        (window as any)['file-tree-alternative'] = {
+            revealFolder: (folderPath: string) => {
+                const folder = this.app.vault.getAbstractFileByPath(folderPath);
+                if (folder && folder instanceof TFolder) {
+                    this.revealFolderInTree(folder);
+                } else {
+                    new Notice(`File Tree Alternative: folder not found - ${folderPath}`);
+                }
+            },
+            openView: () => this.openFileTreeLeaf(true),
+        };
     }
 
     onunload() {
         console.log('Unloading Alternative File Tree Plugin');
         this.detachFileTreeLeafs();
         this.bookmarksRemoveEventListener();
+        this.breadcrumbRemoveEventListener();
+        delete (window as any)['file-tree-alternative'];
     }
 
     async loadSettings() {
@@ -183,6 +207,101 @@ export default class FileTreeAlternativePlugin extends Plugin {
         if (bookmarkLeafElement) {
             bookmarkLeafElement.removeEventListener('click', this.bookmarksEventHandler, true);
         }
+    };
+
+    // --- Native breadcrumb folder-click interception ---
+    // Redirects clicks on folder segments in Obsidian's native note breadcrumb
+    // (the path bar at the top of a note) to reveal the folder in File Tree
+    // Alternative instead of the native file explorer. Mirrors the bookmarks
+    // capture-phase interception pattern above.
+    private readonly BREADCRUMB_FOLDER_SELECTOR = '.view-header-breadcrumb-folder';
+    private readonly BREADCRUMB_CONTAINER_SELECTOR = '.view-header-breadcrumb';
+    private readonly BREADCRUMB_FILE_SELECTOR = '.view-header-breadcrumb-file';
+
+    breadcrumbEventHandler = (event: Event) => {
+        const evt = event as MouseEvent;
+        // Only intercept plain left-clicks; let Ctrl/Cmd-click and middle-click
+        // fall through to Obsidian's native "open in new pane" behavior.
+        if (evt.button !== 0 || evt.ctrlKey || evt.metaKey || evt.shiftKey || evt.altKey) return;
+
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+
+        // Must be inside a native breadcrumb container.
+        const container = target.closest(this.BREADCRUMB_CONTAINER_SELECTOR);
+        if (!container) return;
+
+        // Must be a folder segment (not the trailing file-name segment).
+        const folderEl = target.closest(this.BREADCRUMB_FOLDER_SELECTOR) as HTMLElement | null;
+        if (!folderEl || folderEl.classList.contains('view-header-breadcrumb-file')) return;
+
+        // Resolve the folder path. Prefer explicit attributes, then reconstruct
+        // from the active file's path + the clicked segment's position.
+        const folderPath = this.resolveBreadcrumbFolderPath(folderEl, container as HTMLElement);
+        if (!folderPath) return;
+
+        const folder = this.app.vault.getAbstractFileByPath(folderPath);
+        if (!folder || !(folder instanceof TFolder)) return;
+
+        // Stop Obsidian's native reveal-in-file-explorer behavior.
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        // Reveal in File Tree Alternative.
+        this.revealFolderInTree(folder);
+    };
+
+    /**
+     * Best-effort extraction of the clicked folder's vault path from the
+     * breadcrumb DOM. Falls back to reconstructing from the active file path.
+     */
+    private resolveBreadcrumbFolderPath(folderEl: HTMLElement, container: HTMLElement): string | null {
+        // Strategy 1: explicit data/aria attributes.
+        const dataPath = folderEl.getAttribute('data-path');
+        if (dataPath) return dataPath === '/' || dataPath === '' ? '' : dataPath;
+        const ariaLabel = folderEl.getAttribute('aria-label');
+        if (ariaLabel && ariaLabel.trim() !== '') return ariaLabel;
+
+        // Strategy 2: reconstruct from active file path + segment index.
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return null;
+
+        const segments = Array.from(
+            container.querySelectorAll(`${this.BREADCRUMB_FOLDER_SELECTOR}, ${this.BREADCRUMB_FILE_SELECTOR}`)
+        );
+        const clickedIndex = segments.indexOf(folderEl);
+        if (clickedIndex === -1) {
+            // Folder not in the segment list (e.g. vault-root link); reveal root.
+            return '';
+        }
+
+        // activeFile.parent.path is the folder containing the file. The file is
+        // the last segment; folders precede it. Count folder segments up to and
+        // including the clicked one to determine how deep the clicked folder is.
+        const fileIndex = segments.length - 1; // file is last
+        if (clickedIndex >= fileIndex) return activeFile.parent?.path ?? '';
+
+        // Depth from the clicked folder to the file's parent.
+        const depthBelowClicked = fileIndex - 1 - clickedIndex;
+        let folder = activeFile.parent;
+        for (let i = 0; i < depthBelowClicked && folder; i++) {
+            folder = folder.parent;
+        }
+        return folder ? folder.path : '';
+    }
+
+    breadcrumbAddEventListener = () => {
+        document.addEventListener('click', this.breadcrumbEventHandler, true);
+    };
+
+    breadcrumbRemoveEventListener = () => {
+        document.removeEventListener('click', this.breadcrumbEventHandler, true);
+    };
+
+    /** Opens the File Tree view (if needed) and emits the revealFolder event. */
+    revealFolderInTree = async (folder: TFolder) => {
+        await this.openFileTreeLeaf(true);
+        eventBus.emit(eventTypes.revealFolder, { folder });
     };
 
     triggerVaultChangeEvent = (file: TAbstractFile, changeType: VaultChange, oldPath?: string) => {

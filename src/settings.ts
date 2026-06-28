@@ -40,6 +40,7 @@ export interface FileTreeAlternativePluginSettings {
     showFileNameAsFullPath: boolean;
     bookmarksEvents: boolean;
     overrideFolderClick: boolean;
+    interceptNativeBreadcrumb: boolean;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -72,6 +73,7 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     showFileNameAsFullPath: false,
     bookmarksEvents: false,
     overrideFolderClick: false,
+    interceptNativeBreadcrumb: false,
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -114,6 +116,13 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                 this.plugin.bookmarksAddEventListener();
             } else {
                 this.plugin.bookmarksRemoveEventListener();
+            }
+        }
+        if (key === 'interceptNativeBreadcrumb') {
+            if (value) {
+                this.plugin.breadcrumbAddEventListener();
+            } else {
+                this.plugin.breadcrumbRemoveEventListener();
             }
         }
     }
@@ -265,6 +274,16 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         control: {
                             type: 'toggle' as const,
                             key: 'overrideFolderClick' as const,
+                        },
+                    },
+                    {
+                        name: 'Intercept Native Breadcrumb Folder Clicks',
+                        desc: `When enabled, clicking a folder in Obsidian's native file path (the breadcrumb at the top of a note)`
+                            + ` opens that folder in File Tree Alternative instead of revealing it in the Obsidian native file explorer.`
+                            + ` Ctrl/Cmd-click and middle-click are left untouched (native behavior).`,
+                        control: {
+                            type: 'toggle' as const,
+                            key: 'interceptNativeBreadcrumb' as const,
                         },
                     },
                 ],
