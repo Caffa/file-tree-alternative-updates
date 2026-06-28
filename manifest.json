@@ -3,7 +3,7 @@
     "name": "File Tree Alternative",
     "version": "2.6.0",
     "minAppVersion": "1.7.2",
-    "description": "This plugin allows you to have an alternative file tree view.",
+    "description": "Alternative file tree view (Pamela's fork) — adds native breadcrumb folder-click interception and inter-plugin API.",
     "author": "Ozan Tellioglu",
     "authorUrl": "https://www.ozan.pl",
     "fundingUrl": "https://ko-fi.com/ozante",

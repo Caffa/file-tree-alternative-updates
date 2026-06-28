@@ -13,5 +13,6 @@ cp styles.css file-tree-alternative
 cp -r file-tree-alternative /Users/caffae/Notes/Novel-Writing/.obsidian/plugins/
 cp -r file-tree-alternative "/Users/caffae/Notes/ZettelPublish (Content Creator V2 April 2025)/.obsidian/plugins/"
 cp -r file-tree-alternative "/Users/caffae/Notes/Journal/.obsidian/plugins/"
+cp -r file-tree-alternative "/Users/caffae/Notes/TestPlugin/.obsidian/plugins/"
 
-echo "Updated file-tree-alternative plugin in novel writing, journal and zettelpublish folders"
+echo "Updated file-tree-alternative plugin in novel writing, journal, zettelpublish and testplugin folders"
