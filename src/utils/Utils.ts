@@ -306,8 +306,9 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
         }
     }
 
-    // Step 2: Sort folders by mtime descending and take top N
+    // Step 2: Sort folders by mtime descending, exclude root, take top N
     const sortedFolders = Array.from(folderMtimes.entries())
+        .filter(([folderPath]) => folderPath !== '/' && folderPath !== '')
         .sort((a, b) => b[1] - a[1])
         .slice(0, count);
 

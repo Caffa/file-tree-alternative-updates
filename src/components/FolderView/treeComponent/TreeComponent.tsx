@@ -41,10 +41,14 @@ export default function Tree(props: TreeProps) {
     // Compute recent-folder CSS class based on store state
     const recentClass = useMemo(() => {
         if (!props.plugin.settings.highlightRecentFolders) return '';
+        // Root folder should never get primary highlight, only trail
+        if (props.isRootFolder) {
+            return recentFolderTrail.has(props.folder.path) ? 'oz-recent-folder-trail' : '';
+        }
         if (recentModifiedFolders.has(props.folder.path)) return 'oz-recent-folder-primary';
         if (recentFolderTrail.has(props.folder.path)) return 'oz-recent-folder-trail';
         return '';
-    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, recentModifiedFolders, recentFolderTrail]);
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderTrail]);
 
     // --> For state update from outside of the component
     useEffect(() => setOpen(props.open), [props.open]);
