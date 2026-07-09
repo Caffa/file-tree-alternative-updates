@@ -127,17 +127,17 @@ settings:
     -
         id: oz-fta-recent-folder-primary-color
         title: Recently Modified | Primary Highlight Color
-        description: Set the highlight color for the most recently modified folder
+        description: Set the highlight color for the most recently modified folder. Defaults to your theme's accent color.
         type: variable-color
         format: hex
-        default: '#f59e0b'
+        default: '#'
     -
         id: oz-fta-recent-folder-trail-color
         title: Recently Modified | Trail Highlight Color
-        description: Set the highlight color for ancestor folders in the trail
+        description: Set the highlight color for ancestor folders in the trail. Defaults to a subtle tint of your theme's accent color.
         type: variable-color
-        format: hsl
-        default: '#f59e0b30'
+        format: hex
+        default: '#'
 */
 
 .theme-light,
@@ -154,8 +154,8 @@ settings:
     --oz-fta-all-panes-active-text-color: var(--text-normal);
     --oz-fta-file-pane-active-file-background-color: var(--background-secondary-alt);
     --oz-fta-file-pane-file-name-color: var(--text-muted);
-    --oz-fta-recent-folder-primary-color: #f59e0b;
-    --oz-fta-recent-folder-trail-color: rgba(245, 158, 11, 0.25);
+    --oz-fta-recent-folder-primary-color: var(--interactive-accent);
+    --oz-fta-recent-folder-trail-color: var(--interactive-accent-hover);
 }
 
 .oz-file-tree-header {
@@ -575,7 +575,7 @@ svg.oz-folder-toggle path {
 
 /* Ancestor trail - dimmer highlight */
 .oz-folder-element.oz-recent-folder-trail {
-    background-color: var(--oz-fta-recent-folder-trail-color) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 15%, transparent) !important;
     border-radius: 4px;
 }
 
