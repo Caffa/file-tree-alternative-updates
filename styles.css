@@ -131,13 +131,6 @@ settings:
         type: variable-color
         format: hex
         default: '#'
-    -
-        id: oz-fta-recent-folder-trail-color
-        title: Recently Modified | Trail Highlight Color
-        description: Set the highlight color for ancestor folders in the trail. Defaults to a subtle tint of your theme's accent color.
-        type: variable-color
-        format: hex
-        default: '#'
 */
 
 .theme-light,
@@ -155,7 +148,6 @@ settings:
     --oz-fta-file-pane-active-file-background-color: var(--background-secondary-alt);
     --oz-fta-file-pane-file-name-color: var(--text-muted);
     --oz-fta-recent-folder-primary-color: var(--interactive-accent);
-    --oz-fta-recent-folder-trail-color: var(--interactive-accent-hover);
 }
 
 .oz-file-tree-header {
@@ -573,10 +565,34 @@ svg.oz-folder-toggle path {
     50% { opacity: 0.85; }
 }
 
-/* Ancestor trail - dimmer highlight */
+/* Ancestor trail - depth-based gradient (brighter = deeper = closer to modified file) */
 .oz-folder-element.oz-recent-folder-trail {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 15%, transparent) !important;
     border-radius: 4px;
+}
+
+/* Depth-based trail opacity using the --oz-recent-trail-depth custom property.
+   Deeper folders (closer to the modified file) get brighter highlights.
+   Opacity formula: 0.1 + (depth * 0.12), capped at 0.7 */
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 1"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 15%, transparent) !important;
+}
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 2"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 25%, transparent) !important;
+}
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 3"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 35%, transparent) !important;
+}
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 4"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 45%, transparent) !important;
+}
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 5"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 55%, transparent) !important;
+}
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 6"],
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 7"],
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 8"],
+.oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 9"] {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 65%, transparent) !important;
 }
 
 .oz-folder-element.oz-recent-folder-trail .oz-folder-name {

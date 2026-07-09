@@ -26,7 +26,7 @@ export default function Tree(props: TreeProps) {
     const folderFileCountMap = usePluginStore((s) => s.folderFileCountMap);
     const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
     const recentModifiedFolders = usePluginStore((s) => s.recentModifiedFolders);
-    const recentFolderTrail = usePluginStore((s) => s.recentFolderTrail);
+    const recentFolderDepth = usePluginStore((s) => s.recentFolderDepth);
 
     const longPressEvents = useLongPress((e: React.TouchEvent) => {
         props.onContextMenu(e);
@@ -39,16 +39,35 @@ export default function Tree(props: TreeProps) {
     const isFolderActive = props.folder.path === activeFolderPath;
 
     // Compute recent-folder CSS class based on store state
-    const recentClass = useMemo(() => {
+    const recentClassName = useMemo(() => {
         if (!props.plugin.settings.highlightRecentFolders) return '';
         // Root folder should never get primary highlight, only trail
         if (props.isRootFolder) {
-            return recentFolderTrail.has(props.folder.path) ? 'oz-recent-folder-trail' : '';
+            return recentFolderDepth.has(props.folder.path) ? 'oz-recent-folder-trail' : '';
         }
         if (recentModifiedFolders.has(props.folder.path)) return 'oz-recent-folder-primary';
-        if (recentFolderTrail.has(props.folder.path)) return 'oz-recent-folder-trail';
+        if (recentFolderDepth.has(props.folder.path)) return 'oz-recent-folder-trail';
         return '';
-    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderTrail]);
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderDepth]);
+
+    // Compute depth-based inline style for trail gradient
+    const recentStyle = useMemo((): React.CSSProperties => {
+        if (!props.plugin.settings.highlightRecentFolders) return {};
+        // Root folder: only show trail, never primary
+        if (props.isRootFolder) {
+            const depth = recentFolderDepth.get(props.folder.path);
+            if (depth !== undefined) {
+                return { '--oz-recent-trail-depth': depth } as React.CSSProperties;
+            }
+            return {};
+        }
+        // Primary folder: bright highlight
+        if (recentModifiedFolders.has(props.folder.path)) return { '--oz-recent-is-primary': 1 } as React.CSSProperties;
+        // Trail folder: gradient based on depth
+        const depth = recentFolderDepth.get(props.folder.path);
+        if (depth !== undefined) return { '--oz-recent-trail-depth': depth } as React.CSSProperties;
+        return {};
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderDepth]);
 
     // --> For state update from outside of the component
     useEffect(() => setOpen(props.open), [props.open]);
@@ -177,7 +196,8 @@ export default function Tree(props: TreeProps) {
                 draggable
                 onDragStart={(e) => onFolderDragStart(e, props.folder)}>
                 <div
-                    className={'oz-folder-element' + (highlight ? ' drag-entered' : '') + (recentClass ? ' ' + recentClass : '')}
+                    className={'oz-folder-element' + (highlight ? ' drag-entered' : '') + (recentClassName ? ' ' + recentClassName : '')}
+                    style={{ ...props.style, ...recentStyle }}
                     data-path={props.folder.path}
                     onDragEnter={handleFolderDragEnter}
                     onDragLeave={handleFolderDragLeave}

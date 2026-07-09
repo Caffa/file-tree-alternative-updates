@@ -258,20 +258,21 @@ export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
 };
 
 /**
- * Compute the most recently modified folders and their ancestor trail.
+ * Compute the most recently modified folders and their ancestor depth map.
  * For each file in the vault, propagate its mtime up to parent folders.
- * Return the top N folders by mtime, plus the set of all ancestor paths
- * leading to those folders (the "trail").
+ * Return the top N folders by mtime, plus a depth map for all ancestor paths
+ * leading to those folders. Depth increases from root (1) to the primary
+ * folder's direct parent, allowing CSS to render a gradient trail.
  */
 export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
     recentFolders: Map<string, number>;
-    trailFolders: Set<string>;
+    folderDepth: Map<string, number>;
 } {
     const recentFolders = new Map<string, number>();
-    const trailFolders = new Set<string>();
+    const folderDepth = new Map<string, number>();
 
     if (!plugin.settings.highlightRecentFolders) {
-        return { recentFolders, trailFolders };
+        return { recentFolders, folderDepth };
     }
 
     const count = plugin.settings.recentFoldersCount;
@@ -312,22 +313,26 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
         .sort((a, b) => b[1] - a[1])
         .slice(0, count);
 
-    // Step 3: Build recentFolders map and compute trail
+    // Step 3: Build recentFolders map and compute ancestor trail with depth
     for (const [folderPath, mtime] of sortedFolders) {
         recentFolders.set(folderPath, mtime);
 
-        // Compute ancestor trail: split path by '/' and accumulate each ancestor
+        // Compute ancestor trail with depth
         const parts = folderPath.split('/');
         let current = '';
         for (let i = 0; i < parts.length; i++) {
             current = current ? `${current}/${parts[i]}` : parts[i];
-            trailFolders.add(current);
+            // depth = i + 1 (starts at 1 for first segment after root)
+            const depth = i + 1;
+            const existing = folderDepth.get(current);
+            // Keep the maximum depth (brightest appearance)
+            if (existing === undefined || depth > existing) {
+                folderDepth.set(current, depth);
+            }
         }
-        // Also add root
-        trailFolders.add('/');
     }
 
-    return { recentFolders, trailFolders };
+    return { recentFolders, folderDepth };
 }
 
 /** Parse excluded extensions from settings string into an array */

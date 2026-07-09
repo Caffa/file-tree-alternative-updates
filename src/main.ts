@@ -395,11 +395,11 @@ export default class FileTreeAlternativePlugin extends Plugin {
     refreshRecentFolders = () => {
         if (!this.settings.highlightRecentFolders) {
             usePluginStore.getState().setRecentModifiedFolders(new Map());
-            usePluginStore.getState().setRecentFolderTrail(new Set());
+            usePluginStore.getState().setRecentFolderDepth(new Map());
             return;
         }
-        const { recentFolders, trailFolders } = computeRecentFolders(this);
+        const { recentFolders, folderDepth } = computeRecentFolders(this);
         usePluginStore.getState().setRecentModifiedFolders(recentFolders);
-        usePluginStore.getState().setRecentFolderTrail(trailFolders);
+        usePluginStore.getState().setRecentFolderDepth(folderDepth);
     };
 }

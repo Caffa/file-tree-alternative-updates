@@ -46,7 +46,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const activeOZFile = usePluginStore((s) => s.activeOZFile);
     const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
     const setRecentModifiedFolders = usePluginStore((s) => s.setRecentModifiedFolders);
-    const setRecentFolderTrail = usePluginStore((s) => s.setRecentFolderTrail);
+    const setRecentFolderDepth = usePluginStore((s) => s.setRecentFolderDepth);
 
     // Ref to gate scroll-to-file: only true when user explicitly reveals a file
     const needsScrollRef = useRef(false);
@@ -119,9 +119,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         setInitialActiveFolderPath();
         if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
         // Compute initial recent folders
-        const { recentFolders, trailFolders } = FileTreeUtils.computeRecentFolders(plugin);
+        const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
         setRecentModifiedFolders(recentFolders);
-        setRecentFolderTrail(trailFolders);
+        setRecentFolderDepth(folderDepth);
     }, []);
 
     // Each Focused Folder Change triggers new folder tree build
@@ -159,12 +159,12 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     useEffect(() => {
         const recomputeRecentFolders = () => {
             if (plugin.settings.highlightRecentFolders) {
-                const { recentFolders, trailFolders } = FileTreeUtils.computeRecentFolders(plugin);
+                const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
                 setRecentModifiedFolders(recentFolders);
-                setRecentFolderTrail(trailFolders);
+                setRecentFolderDepth(folderDepth);
             } else {
                 setRecentModifiedFolders(new Map());
-                setRecentFolderTrail(new Set());
+                setRecentFolderDepth(new Map());
             }
         };
         const unsubRefresh = eventBus.on(eventTypes.refreshView, recomputeRecentFolders);
@@ -371,9 +371,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
         // Recompute recently modified folders on vault changes
         if (plugin.settings.highlightRecentFolders) {
-            const { recentFolders, trailFolders } = FileTreeUtils.computeRecentFolders(plugin);
+            const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
             setRecentModifiedFolders(recentFolders);
-            setRecentFolderTrail(trailFolders);
+            setRecentFolderDepth(folderDepth);
         }
     }
 
