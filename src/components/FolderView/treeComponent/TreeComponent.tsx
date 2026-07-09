@@ -25,6 +25,8 @@ export default function Tree(props: TreeProps) {
     const setOpenFolders = usePluginStore((s) => s.setOpenFolders);
     const folderFileCountMap = usePluginStore((s) => s.folderFileCountMap);
     const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
+    const recentModifiedFolders = usePluginStore((s) => s.recentModifiedFolders);
+    const recentFolderTrail = usePluginStore((s) => s.recentFolderTrail);
 
     const longPressEvents = useLongPress((e: React.TouchEvent) => {
         props.onContextMenu(e);
@@ -35,6 +37,14 @@ export default function Tree(props: TreeProps) {
     const [highlight, setHightlight] = useState<boolean>(false);
 
     const isFolderActive = props.folder.path === activeFolderPath;
+
+    // Compute recent-folder CSS class based on store state
+    const recentClass = useMemo(() => {
+        if (!props.plugin.settings.highlightRecentFolders) return '';
+        if (recentModifiedFolders.has(props.folder.path)) return 'oz-recent-folder-primary';
+        if (recentFolderTrail.has(props.folder.path)) return 'oz-recent-folder-trail';
+        return '';
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, recentModifiedFolders, recentFolderTrail]);
 
     // --> For state update from outside of the component
     useEffect(() => setOpen(props.open), [props.open]);
@@ -163,7 +173,7 @@ export default function Tree(props: TreeProps) {
                 draggable
                 onDragStart={(e) => onFolderDragStart(e, props.folder)}>
                 <div
-                    className={'oz-folder-element' + (highlight ? ' drag-entered' : '')}
+                    className={'oz-folder-element' + (highlight ? ' drag-entered' : '') + (recentClass ? ' ' + recentClass : '')}
                     data-path={props.folder.path}
                     onDragEnter={handleFolderDragEnter}
                     onDragLeave={handleFolderDragLeave}

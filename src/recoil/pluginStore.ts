@@ -15,6 +15,8 @@ export interface PluginStoreState {
     openFolders: string[];
     showSubFolders: boolean;
     focusedFolder: TFolder | null;
+    recentModifiedFolders: Map<string, number>;
+    recentFolderTrail: Set<string>;
 }
 
 interface PluginStoreActions {
@@ -30,6 +32,8 @@ interface PluginStoreActions {
     setOpenFolders: (folders: string[]) => void;
     setShowSubFolders: (show: boolean) => void;
     setFocusedFolder: (folder: TFolder | null) => void;
+    setRecentModifiedFolders: (folders: Map<string, number>) => void;
+    setRecentFolderTrail: (trail: Set<string>) => void;
 }
 
 export type PluginStore = PluginStoreState & PluginStoreActions;
@@ -48,6 +52,8 @@ export const usePluginStore = create<PluginStore>()((set) => ({
     openFolders: [] as string[],
     showSubFolders: false,
     focusedFolder: null as TFolder | null,
+    recentModifiedFolders: new Map<string, number>(),
+    recentFolderTrail: new Set<string>(),
 
     // Actions
     setView: (view) => set({ view }),
@@ -62,4 +68,6 @@ export const usePluginStore = create<PluginStore>()((set) => ({
     setOpenFolders: (openFolders) => set({ openFolders }),
     setShowSubFolders: (showSubFolders) => set({ showSubFolders }),
     setFocusedFolder: (focusedFolder) => set({ focusedFolder }),
+    setRecentModifiedFolders: (recentModifiedFolders) => set({ recentModifiedFolders }),
+    setRecentFolderTrail: (recentFolderTrail) => set({ recentFolderTrail }),
 }));

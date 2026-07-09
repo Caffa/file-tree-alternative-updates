@@ -107,13 +107,37 @@ settings:
         type: variable-color
         format: hex
         default: '#'
-    - 
+    -
         id: oz-fta-file-pane-active-file-background-color
         title: File Pane | Active File Background Color
         description: Set the color of active file background color
         type: variable-color
         format: hex
         default: '#'
+
+# Recently Modified Folders Styles
+
+    -
+        id: oz-fta-recent-folders-heading
+        title: Recently Modified Folders
+        description: Style settings for recently modified folder highlighting
+        type: heading
+        level: 2
+        collapsed: true
+    -
+        id: oz-fta-recent-folder-primary-color
+        title: Recently Modified | Primary Highlight Color
+        description: Set the highlight color for the most recently modified folder
+        type: variable-color
+        format: hex
+        default: '#f59e0b'
+    -
+        id: oz-fta-recent-folder-trail-color
+        title: Recently Modified | Trail Highlight Color
+        description: Set the highlight color for ancestor folders in the trail
+        type: variable-color
+        format: hsl
+        default: '#f59e0b30'
 */
 
 .theme-light,
@@ -130,6 +154,8 @@ settings:
     --oz-fta-all-panes-active-text-color: var(--text-normal);
     --oz-fta-file-pane-active-file-background-color: var(--background-secondary-alt);
     --oz-fta-file-pane-file-name-color: var(--text-muted);
+    --oz-fta-recent-folder-primary-color: #f59e0b;
+    --oz-fta-recent-folder-trail-color: rgba(245, 158, 11, 0.25);
 }
 
 .oz-file-tree-header {
@@ -527,6 +553,34 @@ div#file-tree-divider-horizontal.active-divider {
 
 svg.oz-folder-toggle path {
     fill: var(--oz-fta-folder-icon-color) !important;
+}
+
+/* Recently Modified Folder - Primary (the most recently modified) */
+.oz-folder-element.oz-recent-folder-primary {
+    background-color: var(--oz-fta-recent-folder-primary-color) !important;
+    border-radius: 4px;
+    animation: oz-recent-pulse 2s ease-in-out infinite;
+}
+
+.oz-folder-element.oz-recent-folder-primary .oz-folder-name {
+    color: var(--text-on-accent) !important;
+    font-weight: bold;
+}
+
+/* Animate a subtle pulse on the primary folder */
+@keyframes oz-recent-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+/* Ancestor trail - dimmer highlight */
+.oz-folder-element.oz-recent-folder-trail {
+    background-color: var(--oz-fta-recent-folder-trail-color) !important;
+    border-radius: 4px;
+}
+
+.oz-folder-element.oz-recent-folder-trail .oz-folder-name {
+    color: var(--oz-fta-recent-folder-primary-color);
 }
 
 /* Solution for React-Icon Center Issue */

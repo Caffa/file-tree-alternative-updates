@@ -41,6 +41,8 @@ export interface FileTreeAlternativePluginSettings {
     bookmarksEvents: boolean;
     overrideFolderClick: boolean;
     interceptNativeBreadcrumb: boolean;
+    highlightRecentFolders: boolean;
+    recentFoldersCount: number;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -74,6 +76,8 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     bookmarksEvents: false,
     overrideFolderClick: false,
     interceptNativeBreadcrumb: false,
+    highlightRecentFolders: true,
+    recentFoldersCount: 2,
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -284,6 +288,31 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         control: {
                             type: 'toggle' as const,
                             key: 'interceptNativeBreadcrumb' as const,
+                        },
+                    },
+                ],
+            },
+
+            // ---- Recently Modified Folders ----
+            {
+                type: 'group' as const,
+                heading: 'Recently Modified Folders',
+                items: [
+                    {
+                        name: 'Highlight Recently Modified Folders',
+                        desc: 'Turn on to highlight folders containing recently modified files, with a visual trail from root to the modified folder.',
+                        control: {
+                            type: 'toggle' as const,
+                            key: 'highlightRecentFolders' as const,
+                        },
+                    },
+                    {
+                        name: 'Recent Folders Count',
+                        desc: 'How many of the most recently modified folders to highlight (1-5).',
+                        control: {
+                            type: 'dropdown' as const,
+                            key: 'recentFoldersCount' as const,
+                            options: { 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' },
                         },
                     },
                 ],

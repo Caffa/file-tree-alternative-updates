@@ -256,3 +256,97 @@ export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
     }
     return currentItem;
 };
+
+/**
+ * Compute the most recently modified folders and their ancestor trail.
+ * For each file in the vault, propagate its mtime up to parent folders.
+ * Return the top N folders by mtime, plus the set of all ancestor paths
+ * leading to those folders (the "trail").
+ */
+export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
+    recentFolders: Map<string, number>;
+    trailFolders: Set<string>;
+} {
+    const recentFolders = new Map<string, number>();
+    const trailFolders = new Set<string>();
+
+    if (!plugin.settings.highlightRecentFolders) {
+        return { recentFolders, trailFolders };
+    }
+
+    const count = plugin.settings.recentFoldersCount;
+    const excludedExtensions = getExcludedExtensionsList(plugin);
+    const excludedFolders = getExcludedFoldersList(plugin);
+    const hideAttachments = plugin.settings.hideAttachments;
+    const attachmentsFolderName = plugin.settings.attachmentsFolderName;
+
+    // Step 1: Walk all files and propagate mtime to parent folders
+    const folderMtimes = new Map<string, number>();
+    const files = plugin.app.vault.getFiles();
+
+    for (const file of files) {
+        // Skip excluded extensions
+        if (excludedExtensions.includes(file.extension)) continue;
+        // Skip attachments
+        if (hideAttachments && file.path.toLowerCase().includes(attachmentsFolderName.toLowerCase())) continue;
+
+        const mtime = file.stat.mtime;
+
+        // Propagate mtime up through parent folders
+        let folder = file.parent;
+        while (folder) {
+            // Skip excluded folders
+            if (excludedFolders.includes(folder.path)) break;
+
+            const currentMax = folderMtimes.get(folder.path);
+            if (currentMax === undefined || mtime > currentMax) {
+                folderMtimes.set(folder.path, mtime);
+            }
+            folder = folder.parent;
+        }
+    }
+
+    // Step 2: Sort folders by mtime descending and take top N
+    const sortedFolders = Array.from(folderMtimes.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, count);
+
+    // Step 3: Build recentFolders map and compute trail
+    for (const [folderPath, mtime] of sortedFolders) {
+        recentFolders.set(folderPath, mtime);
+
+        // Compute ancestor trail: split path by '/' and accumulate each ancestor
+        const parts = folderPath.split('/');
+        let current = '';
+        for (let i = 0; i < parts.length; i++) {
+            current = current ? `${current}/${parts[i]}` : parts[i];
+            trailFolders.add(current);
+        }
+        // Also add root
+        trailFolders.add('/');
+    }
+
+    return { recentFolders, trailFolders };
+}
+
+/** Parse excluded extensions from settings string into an array */
+function getExcludedExtensionsList(plugin: FileTreeAlternativePlugin): string[] {
+    const result: string[] = [];
+    for (const ext of plugin.settings.excludedExtensions.split(',')) {
+        const trimmed = ext.trim();
+        if (trimmed) result.push(trimmed);
+    }
+    return result;
+}
+
+/** Parse excluded folders from settings string into an array */
+function getExcludedFoldersList(plugin: FileTreeAlternativePlugin): string[] {
+    const result: string[] = [];
+    if (plugin.settings.excludedFolders) {
+        for (const folder of plugin.settings.excludedFolders.split(',')) {
+            const trimmed = folder.trim();
+            if (trimmed) result.push(trimmed);
+        }
+    }
+    return result;
+}

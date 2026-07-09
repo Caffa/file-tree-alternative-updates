@@ -4,7 +4,8 @@ import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } f
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle } from 'utils/Utils';
+import { getBookmarkTitle, computeRecentFolders } from 'utils/Utils';
+import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
     settings: FileTreeAlternativePluginSettings;
@@ -312,10 +313,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
         });
     };
 
-    onCreate = (file: TAbstractFile) => this.triggerVaultChangeEvent(file, 'create', '');
-    onDelete = (file: TAbstractFile) => this.triggerVaultChangeEvent(file, 'delete', '');
-    onModify = (file: TAbstractFile) => this.triggerVaultChangeEvent(file, 'modify', '');
-    onRename = (file: TAbstractFile, oldPath: string) => this.triggerVaultChangeEvent(file, 'rename', oldPath);
+    onCreate = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'create', ''); this.refreshRecentFolders(); };
+    onDelete = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'delete', ''); this.refreshRecentFolders(); };
+    onModify = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'modify', ''); this.refreshRecentFolders(); };
+    onRename = (file: TAbstractFile, oldPath: string) => { this.triggerVaultChangeEvent(file, 'rename', oldPath); this.refreshRecentFolders(); };
 
     refreshIconRibbon = () => {
         this.ribbonIconEl?.remove();
@@ -388,5 +389,17 @@ export default class FileTreeAlternativePlugin extends Plugin {
     refreshTreeLeafs = () => {
         this.detachFileTreeLeafs();
         this.openFileTreeLeaf(true);
+    };
+
+    /** Recompute recently modified folders and update the Zustand store. */
+    refreshRecentFolders = () => {
+        if (!this.settings.highlightRecentFolders) {
+            usePluginStore.getState().setRecentModifiedFolders(new Map());
+            usePluginStore.getState().setRecentFolderTrail(new Set());
+            return;
+        }
+        const { recentFolders, trailFolders } = computeRecentFolders(this);
+        usePluginStore.getState().setRecentModifiedFolders(recentFolders);
+        usePluginStore.getState().setRecentFolderTrail(trailFolders);
     };
 }
