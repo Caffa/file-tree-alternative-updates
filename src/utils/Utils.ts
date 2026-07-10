@@ -259,102 +259,51 @@ export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
 };
 
 /**
- * Compute the most recently modified folders and their ancestor depth map.
- * For each file in the vault, propagate its mtime up to parent folders.
- * Return the top N folders by mtime, plus a depth map for all ancestor paths
- * leading to those folders. Depth increases from root (1) to the primary
- * folder, allowing CSS to render a gradient trail.
+ * Derive recentModifiedFolders and recentFolderDepth from a pre-built folderMtimes map.
+ * This is O(k) where k = number of folders in the map, NOT O(n×d) full vault scan.
  *
- * Exclusions:
- * - The active/focused folder is excluded from primary highlight (it already
- *   has the "active folder" visual treatment).
- * - Root folder is excluded from primary highlight (only gets trail).
- * - When multiple folders have the same mtime, deeper folders are preferred
- *   so the folder closest to the actual modified file gets the primary slot.
+ * - recentModifiedFolders: top N folders by mtime (excluding root and active folder)
+ * - recentFolderDepth: ancestor trail with depth values for CSS gradient
+ *
+ * @param folderMtimes - Map<folderPath, mtime> maintained incrementally by the plugin
+ * @param app - Obsidian App instance (used to get active folder path from store)
+ * @param count - how many top folders to highlight (default 2)
  */
-export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
+export function deriveRecentFolders(
+    folderMtimes: Map<string, number>,
+    app: App,
+    count = 2
+): {
     recentFolders: Map<string, number>;
     folderDepth: Map<string, number>;
 } {
     const recentFolders = new Map<string, number>();
     const folderDepth = new Map<string, number>();
 
-    if (!plugin.settings.highlightRecentFolders) {
+    if (folderMtimes.size === 0) {
         return { recentFolders, folderDepth };
     }
-
-    // Safety: clamp count to valid range
-    const count = Math.max(1, Math.min(5, plugin.settings.recentFoldersCount || 2));
-    const excludedExtensions = getExcludedExtensionsList(plugin);
-    const excludedFolders = getExcludedFoldersList(plugin);
-    const hideAttachments = plugin.settings.hideAttachments;
-    const attachmentsFolderName = plugin.settings.attachmentsFolderName;
 
     // Get the active folder path to exclude from primary highlight
     const activeFolderPath = usePluginStore.getState().activeFolderPath;
 
-    // Step 1: Walk all files and propagate mtime to parent folders
-    const folderMtimes = new Map<string, number>();
-    const folderDepths = new Map<string, number>(); // track folder depth for tie-breaking
-    const files = plugin.app.vault.getFiles();
-
-    for (const file of files) {
-        // Skip excluded extensions
-        if (excludedExtensions.includes(file.extension)) continue;
-        // Skip attachments
-        if (hideAttachments && file.path.toLowerCase().includes(attachmentsFolderName.toLowerCase())) continue;
-
-        const mtime = file.stat.mtime;
-
-        // Propagate mtime up through parent folders
-        let folder = file.parent;
-        let depth = 0;
-        while (folder) {
-            depth++;
-            // Skip excluded folders
-            if (excludedFolders.includes(folder.path)) break;
-
-            const currentMax = folderMtimes.get(folder.path);
-            if (currentMax === undefined || mtime > currentMax) {
-                folderMtimes.set(folder.path, mtime);
-            }
-            // Track the maximum depth at which this folder appears
-            const currentDepth = folderDepths.get(folder.path);
-            if (currentDepth === undefined || depth > currentDepth) {
-                folderDepths.set(folder.path, depth);
-            }
-            folder = folder.parent;
-        }
-    }
-
-    // Step 2: Sort folders by mtime descending, exclude root and active folder,
-    // prefer deeper folders on ties, take top N
+    // Sort folders by mtime descending, exclude root and active folder, take top N
     const sortedFolders = Array.from(folderMtimes.entries())
         .filter(([folderPath]) => folderPath !== '/' && folderPath !== '')
-        .filter(([folderPath]) => folderPath !== activeFolderPath) // exclude active folder
-        .sort((a, b) => {
-            // Sort by mtime descending
-            if (b[1] !== a[1]) return b[1] - a[1];
-            // Tie-break: prefer deeper folders (closer to the modified file)
-            const depthA = folderDepths.get(a[0]) || 0;
-            const depthB = folderDepths.get(b[0]) || 0;
-            return depthB - depthA;
-        })
+        .filter(([folderPath]) => folderPath !== activeFolderPath)
+        .sort((a, b) => b[1] - a[1])
         .slice(0, count);
 
-    // Step 3: Build recentFolders map and compute ancestor trail with depth
+    // Build recentFolders map and compute ancestor trail with depth
     for (const [folderPath, mtime] of sortedFolders) {
         recentFolders.set(folderPath, mtime);
 
-        // Compute ancestor trail including the primary folder itself
         const parts = folderPath.split('/');
         let current = '';
         for (let i = 0; i < parts.length; i++) {
             current = current ? `${current}/${parts[i]}` : parts[i];
-            // depth = i + 1 (starts at 1 for first segment after root)
             const depth = i + 1;
             const existing = folderDepth.get(current);
-            // Keep the maximum depth (brightest appearance)
             if (existing === undefined || depth > existing) {
                 folderDepth.set(current, depth);
             }

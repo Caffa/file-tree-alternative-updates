@@ -45,8 +45,6 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
     const activeOZFile = usePluginStore((s) => s.activeOZFile);
     const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
-    const setRecentModifiedFolders = usePluginStore((s) => s.setRecentModifiedFolders);
-    const setRecentFolderDepth = usePluginStore((s) => s.setRecentFolderDepth);
 
     // Ref to gate scroll-to-file: only true when user explicitly reveals a file
     const needsScrollRef = useRef(false);
@@ -118,14 +116,6 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         setShowSubFolders(plugin.settings.showFilesFromSubFolders);
         setInitialActiveFolderPath();
         if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
-        // Compute initial recent folders
-        try {
-            const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-            setRecentModifiedFolders(recentFolders);
-            setRecentFolderDepth(folderDepth);
-        } catch (e) {
-            console.warn('File Tree Alternative: Failed to compute recent folders on mount', e);
-        }
     }, []);
 
     // Each Focused Folder Change triggers new folder tree build
@@ -158,26 +148,6 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     useEffect(() => savePinnedFilesToSettings(), [ozPinnedFiles]);
     useEffect(() => saveOpenFoldersToSettings(), [openFolders]);
     useEffect(() => saveExcludedFoldersToSettings(), [excludedFolders]);
-
-    // Recompute recent folders when settings change (refreshView is emitted on settings save)
-    useEffect(() => {
-        const recomputeRecentFolders = () => {
-            if (plugin.settings.highlightRecentFolders) {
-                try {
-                    const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-                    setRecentModifiedFolders(recentFolders);
-                    setRecentFolderDepth(folderDepth);
-                } catch (e) {
-                    console.warn('File Tree Alternative: Failed to compute recent folders on settings change', e);
-                }
-            } else {
-                setRecentModifiedFolders(new Map());
-                setRecentFolderDepth(new Map());
-            }
-        };
-        const unsubRefresh = eventBus.on(eventTypes.refreshView, recomputeRecentFolders);
-        return () => unsubRefresh();
-    }, []);
 
     // If activeFolderPath is set, it means it should go to 'file' view
     useEffect(() => {
@@ -374,17 +344,6 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                         plugin.settings.folderCountOption
                     )
                 );
-            }
-        }
-
-        // Recompute recently modified folders on vault changes
-        if (plugin.settings.highlightRecentFolders) {
-            try {
-                const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-                setRecentModifiedFolders(recentFolders);
-                setRecentFolderDepth(folderDepth);
-            } catch (e) {
-                console.warn('File Tree Alternative: Failed to compute recent folders on vault change', e);
             }
         }
     }

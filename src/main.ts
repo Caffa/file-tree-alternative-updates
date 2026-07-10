@@ -1,10 +1,10 @@
-import { Plugin, addIcon, TAbstractFile, TFolder, Notice } from 'obsidian';
+import { Plugin, addIcon, TAbstractFile, TFile, TFolder, Notice } from 'obsidian';
 import { FileTreeView } from './FileTreeView';
 import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } from './utils/icons';
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle, computeRecentFolders } from 'utils/Utils';
+import { getBookmarkTitle, deriveRecentFolders } from 'utils/Utils';
 import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -20,6 +20,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
         customHeightKey: 'fileTreePlugin-CustomHeight',
         customWidthKey: 'fileTreePlugin-CustomWidth',
         focusedFolder: 'fileTreePlugin-FocusedFolder',
+        recentFoldersCacheKey: 'fileTreePlugin-RecentFoldersCache',
     };
 
     // File Tree View Variables
@@ -39,6 +40,9 @@ export default class FileTreeAlternativePlugin extends Plugin {
         // Load Settings
         this.addSettingTab(new FileTreeAlternativePluginSettingsTab(this.app, this));
         await this.loadSettings();
+
+        // Load recent folders from localStorage cache (no full vault scan)
+        this.loadRecentFoldersCache();
 
         // Register File Tree View
         this.registerView(this.VIEW_TYPE, (leaf) => {
@@ -142,15 +146,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.bookmarksRemoveEventListener();
         this.breadcrumbRemoveEventListener();
         delete (window as any)['file-tree-alternative'];
+        if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
     }
 
     async loadSettings() {
         const savedData = await this.loadData();
         this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
-        // Migrate: recentFoldersCount may be stored as a string; ensure it's a number
-        if (typeof (this.settings as any).recentFoldersCount === 'string') {
-            (this.settings as any).recentFoldersCount = parseInt((this.settings as any).recentFoldersCount, 10) || 2;
-        }
     }
 
     async saveSettings() {
@@ -338,10 +339,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
         });
     };
 
-    onCreate = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'create', ''); this.refreshRecentFolders(); };
-    onDelete = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'delete', ''); this.refreshRecentFolders(); };
-    onModify = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'modify', ''); this.refreshRecentFolders(); };
-    onRename = (file: TAbstractFile, oldPath: string) => { this.triggerVaultChangeEvent(file, 'rename', oldPath); this.refreshRecentFolders(); };
+    onCreate = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'create', ''); this.updateRecentFolderOnVaultEvent(file, 'create'); };
+    onDelete = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'delete', ''); this.updateRecentFolderOnVaultEvent(file, 'delete'); };
+    onModify = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'modify', ''); this.updateRecentFolderOnVaultEvent(file, 'modify'); };
+    onRename = (file: TAbstractFile, oldPath: string) => { this.triggerVaultChangeEvent(file, 'rename', oldPath); this.updateRecentFolderOnVaultEvent(file, 'rename', oldPath); };
 
     refreshIconRibbon = () => {
         this.ribbonIconEl?.remove();
@@ -416,19 +417,186 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.openFileTreeLeaf(true);
     };
 
-    /** Recompute recently modified folders and update the Zustand store. */
-    refreshRecentFolders = () => {
+    /**
+     * Load recent folders cache from localStorage on startup.
+     * Falls back to empty if cache is missing or corrupt.
+     * Does NOT scan the vault — relies on vault events to fill in.
+     */
+    loadRecentFoldersCache = () => {
         if (!this.settings.highlightRecentFolders) {
-            usePluginStore.getState().setRecentModifiedFolders(new Map());
-            usePluginStore.getState().setRecentFolderDepth(new Map());
+            this.clearRecentFolders();
             return;
         }
         try {
-            const { recentFolders, folderDepth } = computeRecentFolders(this);
-            usePluginStore.getState().setRecentModifiedFolders(recentFolders);
-            usePluginStore.getState().setRecentFolderDepth(folderDepth);
+            const cached = localStorage.getItem(this.keys.recentFoldersCacheKey);
+            if (cached) {
+                const folderMtimes = new Map<string, number>(JSON.parse(cached));
+                // Prune stale entries (folders that no longer exist)
+                this.pruneRecentFoldersCache(folderMtimes);
+                // Derive display maps from the raw cache
+                const { recentFolders, folderDepth } = deriveRecentFolders(folderMtimes, this.app);
+                usePluginStore.getState().setRecentModifiedFolders(recentFolders);
+                usePluginStore.getState().setRecentFolderDepth(folderDepth);
+                usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
+            }
         } catch (e) {
-            console.warn('File Tree Alternative: Failed to refresh recent folders', e);
+            console.warn('File Tree Alternative: Failed to load recent folders cache', e);
         }
+    };
+
+    /** Prune entries from folderMtimes for folders that no longer exist in the vault. */
+    pruneRecentFoldersCache = (folderMtimes: Map<string, number>) => {
+        for (const [folderPath] of folderMtimes) {
+            if (folderPath !== '' && folderPath !== '/' && !this.app.vault.getAbstractFileByPath(folderPath)) {
+                folderMtimes.delete(folderPath);
+            }
+        }
+    };
+
+    /**
+     * Incremental update: O(d) per event instead of O(n×d) full scan.
+     * On modify/create: update file.parent.path and all ancestors with file.stat.mtime
+     * On delete: recompute parent folder's max mtime from remaining children, propagate up
+     * On rename: delete old path entries + create new path entries
+     */
+    updateRecentFolderOnVaultEvent = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
+        if (!this.settings.highlightRecentFolders) {
+            this.clearRecentFolders();
+            return;
+        }
+        // Debounce rapid successive events (common during sync / startup burst)
+        this.debouncedRecentFolderUpdate(file, eventType, oldPath);
+    };
+
+    /** Clear all recent folders data from store and localStorage. */
+    clearRecentFolders = () => {
+        usePluginStore.getState().setRecentModifiedFolders(new Map());
+        usePluginStore.getState().setRecentFolderDepth(new Map());
+        usePluginStore.getState().setRecentFolderMtimes(new Map());
+        localStorage.removeItem(this.keys.recentFoldersCacheKey);
+    };
+
+    /**
+     * Apply incremental update to the folderMtimes map and persist to localStorage.
+     */
+    private doRecentFolderUpdate = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
+        const folderMtimes = new Map(usePluginStore.getState().recentFolderMtimes);
+
+        if (eventType === 'modify' || eventType === 'create') {
+            if (file instanceof TFile) {
+                const mtime = file.stat.mtime;
+                let folder = file.parent;
+                while (folder) {
+                    const current = folderMtimes.get(folder.path);
+                    if (current === undefined || mtime > current) {
+                        folderMtimes.set(folder.path, mtime);
+                    }
+                    folder = folder.parent;
+                }
+            }
+        } else if (eventType === 'delete') {
+            // Remove the deleted file's contribution from its parent chain
+            if (file instanceof TFile && file.parent) {
+                this.recomputeFolderMtime(folderMtimes, file.parent);
+            }
+        } else if (eventType === 'rename') {
+            // Remove old path contributions and add new path contributions
+            if (file instanceof TFile && oldPath) {
+                const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+                if (oldParentPath) {
+                    const oldFolder = this.app.vault.getAbstractFileByPath(oldParentPath);
+                    if (oldFolder instanceof TFolder) {
+                        this.recomputeFolderMtime(folderMtimes, oldFolder);
+                    }
+                }
+                // Add new path
+                const mtime = file.stat.mtime;
+                let folder = file.parent;
+                while (folder) {
+                    const current = folderMtimes.get(folder.path);
+                    if (current === undefined || mtime > current) {
+                        folderMtimes.set(folder.path, mtime);
+                    }
+                    folder = folder.parent;
+                }
+            }
+        }
+
+        // Derive display maps
+        const { recentFolders, folderDepth } = deriveRecentFolders(folderMtimes, this.app);
+        usePluginStore.getState().setRecentModifiedFolders(recentFolders);
+        usePluginStore.getState().setRecentFolderDepth(folderDepth);
+        usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
+
+        // Persist to localStorage
+        try {
+            localStorage.setItem(this.keys.recentFoldersCacheKey, JSON.stringify(Array.from(folderMtimes.entries())));
+        } catch (e) {
+            console.warn('File Tree Alternative: Failed to persist recent folders cache', e);
+        }
+    };
+
+    /**
+     * Recompute a folder's max mtime by checking its remaining children's files.
+     * Propagate the change up to ancestors.
+     */
+    private recomputeFolderMtime = (folderMtimes: Map<string, number>, folder: TFolder) => {
+        // Find the max mtime among this folder's direct and nested file children
+        let maxMtime = 0;
+        const collectMaxMtime = (f: TFolder): number => {
+            let max = 0;
+            for (const child of f.children) {
+                if (child instanceof TFile) {
+                    if (child.stat.mtime > max) max = child.stat.mtime;
+                } else if (child instanceof TFolder) {
+                    const childMax = collectMaxMtime(child);
+                    if (childMax > max) max = childMax;
+                }
+            }
+            return max;
+        };
+        maxMtime = collectMaxMtime(folder);
+
+        if (maxMtime === 0) {
+            folderMtimes.delete(folder.path);
+        } else {
+            folderMtimes.set(folder.path, maxMtime);
+        }
+
+        // Propagate up to ancestors
+        let parent = folder.parent;
+        while (parent) {
+            const current = folderMtimes.get(parent.path);
+            if (current === undefined || maxMtime > current) {
+                if (maxMtime > 0) {
+                    folderMtimes.set(parent.path, maxMtime);
+                }
+            }
+            // Also check if parent's max should be lowered — we'd need to recompute
+            // parent too, but for simplicity just set if higher
+            parent = parent.parent;
+        }
+    };
+
+    /** Debounced wrapper for recent folder updates — batches rapid successive vault events. */
+    private recentFolderUpdateQueue: { file: TAbstractFile; eventType: string; oldPath?: string }[] = [];
+    private recentFolderUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    private debouncedRecentFolderUpdate = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
+        this.recentFolderUpdateQueue.push({ file, eventType, oldPath });
+        if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
+        this.recentFolderUpdateTimer = setTimeout(() => {
+            const queue = [...this.recentFolderUpdateQueue];
+            this.recentFolderUpdateQueue = [];
+            this.recentFolderUpdateTimer = null;
+            // Process the last event for each unique file path
+            const seen = new Set<string>();
+            for (let i = queue.length - 1; i >= 0; i--) {
+                const item = queue[i];
+                const key = item.file.path + item.eventType;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                this.doRecentFolderUpdate(item.file, item.eventType as any, item.oldPath);
+            }
+        }, 200);
     };
 }
