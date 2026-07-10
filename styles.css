@@ -125,9 +125,9 @@ settings:
         level: 2
         collapsed: true
     -
-        id: oz-fta-recent-folder-primary-color
-        title: Recently Modified | Primary Highlight Color
-        description: Set the highlight color for the most recently modified folder. Defaults to your theme's accent color.
+        id: oz-fta-recent-trail-0-color
+        title: Recently Modified | Trail 1 Color
+        description: Set the highlight color for the most recently modified folder trail. Defaults to your theme's accent color.
         type: variable-color
         format: hex
         default: '#'
@@ -161,7 +161,6 @@ settings:
     --oz-fta-all-panes-active-text-color: var(--text-normal);
     --oz-fta-file-pane-active-file-background-color: var(--background-secondary-alt);
     --oz-fta-file-pane-file-name-color: var(--text-muted);
-    --oz-fta-recent-folder-primary-color: var(--interactive-accent);
     --oz-fta-recent-trail-0-color: var(--interactive-accent);
     --oz-fta-recent-trail-1-color: #e67e22;
     --oz-fta-recent-trail-2-color: #2ecc71;
