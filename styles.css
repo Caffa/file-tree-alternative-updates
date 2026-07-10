@@ -463,11 +463,6 @@ div.oz-folder-name.is-root-folder {
     flex: 1;
 }
 
-.oz-coffee-div {
-    text-align: center;
-    margin-top: 10px;
-}
-
 #file-tree-divider {
     height: 3.8px;
     opacity: 0.3;
@@ -549,13 +544,13 @@ svg.oz-folder-toggle path {
 
 /* Recently Modified Folder - Primary (the most recently modified) */
 .oz-folder-element.oz-recent-folder-primary {
-    background-color: var(--oz-fta-recent-folder-primary-color) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 50%, transparent) !important;
     border-radius: 4px;
     animation: oz-recent-pulse 2s ease-in-out infinite;
 }
 
 .oz-folder-element.oz-recent-folder-primary .oz-folder-name {
-    color: var(--text-on-accent) !important;
+    color: var(--text-normal) !important;
     font-weight: bold;
 }
 
@@ -572,27 +567,28 @@ svg.oz-folder-toggle path {
 
 /* Depth-based trail opacity using the --oz-recent-trail-depth custom property.
    Deeper folders (closer to the modified file) get brighter highlights.
-   Opacity formula: 0.1 + (depth * 0.12), capped at 0.7 */
+   Uses a gentle curve: starts at 6% and increases ~6% per level, reaching ~42%
+   at depth 6+. This makes the transition between levels smooth and subtle. */
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 1"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 15%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 6%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 2"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 25%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 12%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 3"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 35%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 18%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 4"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 45%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 25%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 5"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 55%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 32%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 6"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 7"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 8"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 9"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 65%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 40%, transparent) !important;
 }
 
 .oz-folder-element.oz-recent-folder-trail .oz-folder-name {

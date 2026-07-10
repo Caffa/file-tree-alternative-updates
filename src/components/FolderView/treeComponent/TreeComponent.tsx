@@ -41,6 +41,8 @@ export default function Tree(props: TreeProps) {
     // Compute recent-folder CSS class based on store state
     const recentClassName = useMemo(() => {
         if (!props.plugin.settings.highlightRecentFolders) return '';
+        // Active/focused folder should never get recent highlight (it already has active styling)
+        if (isFolderActive) return '';
         // Root folder should never get primary highlight, only trail
         if (props.isRootFolder) {
             return recentFolderDepth.has(props.folder.path) ? 'oz-recent-folder-trail' : '';
@@ -48,11 +50,13 @@ export default function Tree(props: TreeProps) {
         if (recentModifiedFolders.has(props.folder.path)) return 'oz-recent-folder-primary';
         if (recentFolderDepth.has(props.folder.path)) return 'oz-recent-folder-trail';
         return '';
-    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderDepth]);
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, isFolderActive, recentModifiedFolders, recentFolderDepth]);
 
     // Compute depth-based inline style for trail gradient
     const recentStyle = useMemo((): React.CSSProperties => {
         if (!props.plugin.settings.highlightRecentFolders) return {};
+        // Active folder: no recent highlight styling
+        if (isFolderActive) return {};
         // Root folder: only show trail, never primary
         if (props.isRootFolder) {
             const depth = recentFolderDepth.get(props.folder.path);
@@ -67,7 +71,7 @@ export default function Tree(props: TreeProps) {
         const depth = recentFolderDepth.get(props.folder.path);
         if (depth !== undefined) return { '--oz-recent-trail-depth': depth } as React.CSSProperties;
         return {};
-    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, recentModifiedFolders, recentFolderDepth]);
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, isFolderActive, recentModifiedFolders, recentFolderDepth]);
 
     // --> For state update from outside of the component
     useEffect(() => setOpen(props.open), [props.open]);

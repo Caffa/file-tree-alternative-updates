@@ -2,6 +2,7 @@ import { TFile, TFolder, App, Keymap, Platform } from 'obsidian';
 import FileTreeAlternativePlugin from 'main';
 import { FolderFileCountMap, FolderTree, OZFile, BookmarksPluginItem } from 'utils/types';
 import { VaultChangeModal } from 'modals';
+import { usePluginStore } from '../recoil/pluginStore';
 
 // Helper Function To Get List of Files
 export const getFilesUnderPath = (params: {
@@ -262,7 +263,14 @@ export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
  * For each file in the vault, propagate its mtime up to parent folders.
  * Return the top N folders by mtime, plus a depth map for all ancestor paths
  * leading to those folders. Depth increases from root (1) to the primary
- * folder's direct parent, allowing CSS to render a gradient trail.
+ * folder, allowing CSS to render a gradient trail.
+ *
+ * Exclusions:
+ * - The active/focused folder is excluded from primary highlight (it already
+ *   has the "active folder" visual treatment).
+ * - Root folder is excluded from primary highlight (only gets trail).
+ * - When multiple folders have the same mtime, deeper folders are preferred
+ *   so the folder closest to the actual modified file gets the primary slot.
  */
 export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
     recentFolders: Map<string, number>;
@@ -282,8 +290,12 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
     const hideAttachments = plugin.settings.hideAttachments;
     const attachmentsFolderName = plugin.settings.attachmentsFolderName;
 
+    // Get the active folder path to exclude from primary highlight
+    const activeFolderPath = usePluginStore.getState().activeFolderPath;
+
     // Step 1: Walk all files and propagate mtime to parent folders
     const folderMtimes = new Map<string, number>();
+    const folderDepths = new Map<string, number>(); // track folder depth for tie-breaking
     const files = plugin.app.vault.getFiles();
 
     for (const file of files) {
@@ -296,7 +308,9 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
 
         // Propagate mtime up through parent folders
         let folder = file.parent;
+        let depth = 0;
         while (folder) {
+            depth++;
             // Skip excluded folders
             if (excludedFolders.includes(folder.path)) break;
 
@@ -304,21 +318,35 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
             if (currentMax === undefined || mtime > currentMax) {
                 folderMtimes.set(folder.path, mtime);
             }
+            // Track the maximum depth at which this folder appears
+            const currentDepth = folderDepths.get(folder.path);
+            if (currentDepth === undefined || depth > currentDepth) {
+                folderDepths.set(folder.path, depth);
+            }
             folder = folder.parent;
         }
     }
 
-    // Step 2: Sort folders by mtime descending, exclude root, take top N
+    // Step 2: Sort folders by mtime descending, exclude root and active folder,
+    // prefer deeper folders on ties, take top N
     const sortedFolders = Array.from(folderMtimes.entries())
         .filter(([folderPath]) => folderPath !== '/' && folderPath !== '')
-        .sort((a, b) => b[1] - a[1])
+        .filter(([folderPath]) => folderPath !== activeFolderPath) // exclude active folder
+        .sort((a, b) => {
+            // Sort by mtime descending
+            if (b[1] !== a[1]) return b[1] - a[1];
+            // Tie-break: prefer deeper folders (closer to the modified file)
+            const depthA = folderDepths.get(a[0]) || 0;
+            const depthB = folderDepths.get(b[0]) || 0;
+            return depthB - depthA;
+        })
         .slice(0, count);
 
     // Step 3: Build recentFolders map and compute ancestor trail with depth
     for (const [folderPath, mtime] of sortedFolders) {
         recentFolders.set(folderPath, mtime);
 
-        // Compute ancestor trail with depth
+        // Compute ancestor trail including the primary folder itself
         const parts = folderPath.split('/');
         let current = '';
         for (let i = 0; i < parts.length; i++) {

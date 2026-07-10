@@ -1,5 +1,5 @@
 import FileTreeAlternativePlugin from './main';
-import { PluginSettingTab, Setting, App, Notice } from 'obsidian';
+import { PluginSettingTab, Setting, App, Notice, SettingDefinitionItem, SettingDefinitionRender, SettingDefinitionEmpty } from 'obsidian';
 // LocalStorageHandler replaced with native localStorage.removeItem()
 import { eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
@@ -138,40 +138,74 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
         const defs = this.getSettingDefinitions();
         for (const def of defs) {
             const group = def as any;
+            if (group.type !== 'group') continue;
             if (group.heading) containerEl.createEl('h2', { text: group.heading });
             for (const item of group.items || []) {
-                if (item.render) {
-                    item.render(new Setting(containerEl), null);
-                } else if (item.action) {
-                    item.action(containerEl, 0);
+                const itemDef = item as any;
+                if (itemDef.control) {
+                    // Declarative control: render manually using Setting
+                    const setting = new Setting(containerEl);
+                    setting.setName(itemDef.name);
+                    if (itemDef.desc) setting.setDesc(itemDef.desc);
+                    const key = itemDef.control.key;
+                    if (itemDef.control.type === 'toggle') {
+                        setting.addToggle((toggle) => {
+                            toggle.setValue(this.plugin.settings[key] as boolean);
+                            toggle.onChange((val) => {
+                                this.setControlValue(key, val);
+                            });
+                        });
+                    } else if (itemDef.control.type === 'dropdown') {
+                        setting.addDropdown((dropdown) => {
+                            for (const [val, label] of Object.entries(itemDef.control.options)) {
+                                dropdown.addOption(val, label as string);
+                            }
+                            dropdown.setValue(this.plugin.settings[key] as string);
+                            dropdown.onChange((val) => {
+                                this.setControlValue(key, val);
+                            });
+                        });
+                    } else if (itemDef.control.type === 'textarea') {
+                        setting.addTextArea((text) => {
+                            if (itemDef.control.placeholder) text.setPlaceholder(itemDef.control.placeholder);
+                            if (itemDef.control.rows) text.inputEl.rows = itemDef.control.rows;
+                            text.setValue(this.plugin.settings[key] as string);
+                            text.onChange((val) => {
+                                this.setControlValue(key, val);
+                            });
+                        });
+                    } else if (itemDef.control.type === 'number') {
+                        setting.addText((text) => {
+                            text.inputEl.type = 'number';
+                            if (itemDef.control.min !== undefined) text.inputEl.min = String(itemDef.control.min);
+                            if (itemDef.control.max !== undefined) text.inputEl.max = String(itemDef.control.max);
+                            if (itemDef.control.step !== undefined) text.inputEl.step = String(itemDef.control.step);
+                            text.setValue(String(this.plugin.settings[key] ?? ''));
+                            text.onChange((val) => {
+                                this.setControlValue(key, parseFloat(val) || 0);
+                            });
+                        });
+                    }
+                } else if (itemDef.render) {
+                    const setting = new Setting(containerEl);
+                    if (itemDef.name) setting.setName(itemDef.name);
+                    if (itemDef.desc) setting.setDesc(itemDef.desc);
+                    itemDef.render(setting, null);
+                } else if (itemDef.action) {
+                    const setting = new Setting(containerEl);
+                    if (itemDef.name) setting.setName(itemDef.name);
+                    if (itemDef.desc) setting.setDesc(itemDef.desc);
+                    setting.addButton((button) => {
+                        button.setButtonText(itemDef.name);
+                        button.onClick(() => itemDef.action(containerEl, 0));
+                    });
                 }
             }
         }
     }
 
-    getSettingDefinitions(): import('obsidian').SettingDefinitionItem[] {
+    getSettingDefinitions(): SettingDefinitionItem[] {
         return [
-            // ---- Buy Me a Coffee ----
-            {
-                type: 'group' as const,
-                items: [
-                    {
-                        name: '',
-                        render: (_setting: Setting) => {
-                            const coffeeDiv = (this.containerEl || document.body).createDiv('coffee');
-                            coffeeDiv.addClass('oz-coffee-div');
-                            const coffeeLink = coffeeDiv.createEl('a', { href: 'https://ko-fi.com/L3L356V6Q' });
-                            const coffeeImg = coffeeLink.createEl('img', {
-                                attr: {
-                                    src: 'https://cdn.ko-fi.com/cdn/kofi2.png?v=3',
-                                },
-                            });
-                            coffeeImg.height = 45;
-                        },
-                    } as any,
-                ],
-            },
-
             // ---- General Settings ----
             {
                 type: 'group' as const,
@@ -419,12 +453,9 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                 heading: 'File Creation',
                 items: [
                     {
-                        name: '',
+                        name: 'File Creation Settings',
                         desc: 'The settings below are only applicable if the plus (+) button within the file pane of the plugin is used.',
-                        render: (_setting: Setting) => {
-                            // This item only renders the description paragraph — no control needed
-                        },
-                    } as any,
+                    } as SettingDefinitionEmpty,
                     {
                         name: 'Created information in YAML',
                         desc: 'Turn on if you want plugin to include created YAML key with the time of creation',
@@ -483,7 +514,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: '',
+                        name: 'Reload File Tree',
                         desc: 'Use this button to reload the file tree. Reloading the file tree is required for some of the settings.'
                             + ' You can also restart your vault to have same effect.',
                         render: (setting: Setting) => {
@@ -497,7 +528,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                                     });
                             });
                         },
-                    } as any,
+                    } as SettingDefinitionRender,
                 ],
             },
 
@@ -528,7 +559,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                                     });
                             });
                         },
-                    } as any,
+                    } as SettingDefinitionRender,
                     {
                         name: 'Clear Pinned Files',
                         desc: `This button will clear the pinned files in the file list pane.`,
@@ -544,7 +575,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                                     });
                             });
                         },
-                    } as any,
+                    } as SettingDefinitionRender,
                 ],
             },
         ];
