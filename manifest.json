@@ -4,8 +4,8 @@
     "version": "2.6.0",
     "minAppVersion": "1.7.2",
     "description": "Alternative file tree view (Pamela's fork) — adds native breadcrumb folder-click interception and inter-plugin API.",
-    "author": "Ozan Tellioglu",
-    "authorUrl": "https://www.ozan.pl",
+    "author": "Pamela Wang (original by Ozan Tellioglu)",
+    "authorUrl": "",
     "fundingUrl": "https://ko-fi.com/ozante",
     "isDesktopOnly": false
 }
