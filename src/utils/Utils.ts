@@ -275,8 +275,8 @@ export function computeRecentFolders(plugin: FileTreeAlternativePlugin): {
         return { recentFolders, folderDepth };
     }
 
-    // Safety: ensure count is a valid positive number (dropdown stores strings)
-    const count = Math.max(1, Math.min(5, parseInt(String(plugin.settings.recentFoldersCount), 10) || 2));
+    // Safety: clamp count to valid range
+    const count = Math.max(1, Math.min(5, plugin.settings.recentFoldersCount || 2));
     const excludedExtensions = getExcludedExtensionsList(plugin);
     const excludedFolders = getExcludedFoldersList(plugin);
     const hideAttachments = plugin.settings.hideAttachments;

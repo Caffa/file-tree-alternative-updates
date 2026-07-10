@@ -145,7 +145,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const savedData = await this.loadData();
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+        // Migrate: recentFoldersCount may be stored as a string; ensure it's a number
+        if (typeof (this.settings as any).recentFoldersCount === 'string') {
+            (this.settings as any).recentFoldersCount = parseInt((this.settings as any).recentFoldersCount, 10) || 2;
+        }
     }
 
     async saveSettings() {
