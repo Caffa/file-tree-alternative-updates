@@ -27,6 +27,7 @@ export default function Tree(props: TreeProps) {
     const activeFolderPath = usePluginStore((s) => s.activeFolderPath);
     const recentModifiedFolders = usePluginStore((s) => s.recentModifiedFolders);
     const recentFolderDepth = usePluginStore((s) => s.recentFolderDepth);
+    const recentFolderTrailIndex = usePluginStore((s) => s.recentFolderTrailIndex);
 
     const longPressEvents = useLongPress((e: React.TouchEvent) => {
         props.onContextMenu(e);
@@ -57,21 +58,38 @@ export default function Tree(props: TreeProps) {
         if (!props.plugin.settings.highlightRecentFolders) return {};
         // Active folder: no recent highlight styling
         if (isFolderActive) return {};
+
+        const trailIndex = recentFolderTrailIndex.get(props.folder.path);
+        if (trailIndex === undefined) return {};
+
         // Root folder: only show trail, never primary
         if (props.isRootFolder) {
             const depth = recentFolderDepth.get(props.folder.path);
             if (depth !== undefined) {
-                return { '--oz-recent-trail-depth': depth } as React.CSSProperties;
+                return {
+                    '--oz-recent-trail-depth': depth,
+                    '--oz-recent-trail-index': trailIndex,
+                } as React.CSSProperties;
             }
             return {};
         }
         // Primary folder: bright highlight
-        if (recentModifiedFolders.has(props.folder.path)) return { '--oz-recent-is-primary': 1 } as React.CSSProperties;
+        if (recentModifiedFolders.has(props.folder.path)) {
+            return {
+                '--oz-recent-is-primary': 1,
+                '--oz-recent-trail-index': trailIndex,
+            } as React.CSSProperties;
+        }
         // Trail folder: gradient based on depth
         const depth = recentFolderDepth.get(props.folder.path);
-        if (depth !== undefined) return { '--oz-recent-trail-depth': depth } as React.CSSProperties;
+        if (depth !== undefined) {
+            return {
+                '--oz-recent-trail-depth': depth,
+                '--oz-recent-trail-index': trailIndex,
+            } as React.CSSProperties;
+        }
         return {};
-    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, isFolderActive, recentModifiedFolders, recentFolderDepth]);
+    }, [props.plugin.settings.highlightRecentFolders, props.folder.path, props.isRootFolder, isFolderActive, recentModifiedFolders, recentFolderDepth, recentFolderTrailIndex]);
 
     // --> For state update from outside of the component
     useEffect(() => setOpen(props.open), [props.open]);

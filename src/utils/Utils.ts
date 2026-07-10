@@ -259,29 +259,32 @@ export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
 };
 
 /**
- * Derive recentModifiedFolders and recentFolderDepth from a pre-built folderMtimes map.
+ * Derive recentModifiedFolders, recentFolderDepth, and folderTrailIndex from a pre-built folderMtimes map.
  * This is O(k) where k = number of folders in the map, NOT O(n×d) full vault scan.
  *
  * - recentModifiedFolders: top N folders by mtime (excluding root and active folder)
  * - recentFolderDepth: ancestor trail with depth values for CSS gradient
+ * - folderTrailIndex: maps every folder (primary + ancestors) to a trail index (0, 1, 2, etc.) for color coding
  *
  * @param folderMtimes - Map<folderPath, mtime> maintained incrementally by the plugin
  * @param app - Obsidian App instance (used to get active folder path from store)
- * @param count - how many top folders to highlight (default 2)
+ * @param count - how many top folders to highlight (default 1)
  */
 export function deriveRecentFolders(
     folderMtimes: Map<string, number>,
     app: App,
-    count = 2
+    count = 1
 ): {
     recentFolders: Map<string, number>;
     folderDepth: Map<string, number>;
+    folderTrailIndex: Map<string, number>;
 } {
     const recentFolders = new Map<string, number>();
     const folderDepth = new Map<string, number>();
+    const folderTrailIndex = new Map<string, number>();
 
     if (folderMtimes.size === 0) {
-        return { recentFolders, folderDepth };
+        return { recentFolders, folderDepth, folderTrailIndex };
     }
 
     // Get the active folder path to exclude from primary highlight
@@ -294,9 +297,13 @@ export function deriveRecentFolders(
         .sort((a, b) => b[1] - a[1])
         .slice(0, count);
 
-    // Build recentFolders map and compute ancestor trail with depth
-    for (const [folderPath, mtime] of sortedFolders) {
+    // Build recentFolders map and compute ancestor trail with depth and trail index
+    sortedFolders.forEach((entry, trailIndex) => {
+        const [folderPath, mtime] = entry;
         recentFolders.set(folderPath, mtime);
+
+        // Assign trail index to the primary folder itself
+        folderTrailIndex.set(folderPath, trailIndex);
 
         const parts = folderPath.split('/');
         let current = '';
@@ -307,10 +314,14 @@ export function deriveRecentFolders(
             if (existing === undefined || depth > existing) {
                 folderDepth.set(current, depth);
             }
+            // Assign trail index to ancestor if not already assigned (first trail wins)
+            if (!folderTrailIndex.has(current)) {
+                folderTrailIndex.set(current, trailIndex);
+            }
         }
-    }
+    });
 
-    return { recentFolders, folderDepth };
+    return { recentFolders, folderDepth, folderTrailIndex };
 }
 
 /** Parse excluded extensions from settings string into an array */

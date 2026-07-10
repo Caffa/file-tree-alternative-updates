@@ -18,6 +18,7 @@ export interface PluginStoreState {
     recentModifiedFolders: Map<string, number>;
     recentFolderDepth: Map<string, number>;
     recentFolderMtimes: Map<string, number>;
+    recentFolderTrailIndex: Map<string, number>;
 }
 
 interface PluginStoreActions {
@@ -36,6 +37,7 @@ interface PluginStoreActions {
     setRecentModifiedFolders: (folders: Map<string, number>) => void;
     setRecentFolderDepth: (depth: Map<string, number>) => void;
     setRecentFolderMtimes: (mtimes: Map<string, number>) => void;
+    setRecentFolderTrailIndex: (index: Map<string, number>) => void;
 }
 
 export type PluginStore = PluginStoreState & PluginStoreActions;
@@ -57,6 +59,7 @@ export const usePluginStore = create<PluginStore>()((set) => ({
     recentModifiedFolders: new Map<string, number>(),
     recentFolderDepth: new Map<string, number>(),
     recentFolderMtimes: new Map<string, number>(),
+    recentFolderTrailIndex: new Map<string, number>(),
 
     // Actions
     setView: (view) => set({ view }),
@@ -74,4 +77,5 @@ export const usePluginStore = create<PluginStore>()((set) => ({
     setRecentModifiedFolders: (recentModifiedFolders) => set({ recentModifiedFolders }),
     setRecentFolderDepth: (recentFolderDepth) => set({ recentFolderDepth }),
     setRecentFolderMtimes: (recentFolderMtimes) => set({ recentFolderMtimes }),
+    setRecentFolderTrailIndex: (recentFolderTrailIndex) => set({ recentFolderTrailIndex }),
 }));

@@ -42,6 +42,7 @@ export interface FileTreeAlternativePluginSettings {
     overrideFolderClick: boolean;
     interceptNativeBreadcrumb: boolean;
     highlightRecentFolders: boolean;
+    recentFoldersCount: number;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -76,6 +77,7 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     overrideFolderClick: false,
     interceptNativeBreadcrumb: false,
     highlightRecentFolders: true,
+    recentFoldersCount: 1,
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -333,6 +335,15 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         control: {
                             type: 'toggle' as const,
                             key: 'highlightRecentFolders' as const,
+                        },
+                    },
+                    {
+                        name: 'Recent Folders Count',
+                        desc: 'How many of the most recently modified folders to highlight with colored trails (1-3). Each trail gets a different color.',
+                        control: {
+                            type: 'dropdown' as const,
+                            key: 'recentFoldersCount' as const,
+                            options: { 1: '1', 2: '2', 3: '3' },
                         },
                     },
 

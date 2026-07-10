@@ -131,6 +131,20 @@ settings:
         type: variable-color
         format: hex
         default: '#'
+    -
+        id: oz-fta-recent-trail-1-color
+        title: Recently Modified | Trail 2 Color
+        description: Set the highlight color for the second most recently modified folder trail. Defaults to orange.
+        type: variable-color
+        format: hex
+        default: '#e67e22'
+    -
+        id: oz-fta-recent-trail-2-color
+        title: Recently Modified | Trail 3 Color
+        description: Set the highlight color for the third most recently modified folder trail. Defaults to green.
+        type: variable-color
+        format: hex
+        default: '#2ecc71'
 */
 
 .theme-light,
@@ -148,6 +162,9 @@ settings:
     --oz-fta-file-pane-active-file-background-color: var(--background-secondary-alt);
     --oz-fta-file-pane-file-name-color: var(--text-muted);
     --oz-fta-recent-folder-primary-color: var(--interactive-accent);
+    --oz-fta-recent-trail-0-color: var(--interactive-accent);
+    --oz-fta-recent-trail-1-color: #e67e22;
+    --oz-fta-recent-trail-2-color: #2ecc71;
 }
 
 .oz-file-tree-header {
@@ -544,7 +561,7 @@ svg.oz-folder-toggle path {
 
 /* Recently Modified Folder - Primary (the most recently modified) */
 .oz-folder-element.oz-recent-folder-primary {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 50%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 50%, transparent) !important;
     border-radius: 4px;
     animation: oz-recent-pulse 2s ease-in-out infinite;
 }
@@ -565,34 +582,45 @@ svg.oz-folder-toggle path {
     border-radius: 4px;
 }
 
+/* Trail color resolution: map --oz-recent-trail-index to the corresponding color variable */
+.oz-folder-element[style*="--oz-recent-trail-index: 0"] {
+    --oz-recent-trail-color: var(--oz-fta-recent-trail-0-color);
+}
+.oz-folder-element[style*="--oz-recent-trail-index: 1"] {
+    --oz-recent-trail-color: var(--oz-fta-recent-trail-1-color);
+}
+.oz-folder-element[style*="--oz-recent-trail-index: 2"] {
+    --oz-recent-trail-color: var(--oz-fta-recent-trail-2-color);
+}
+
 /* Depth-based trail opacity using the --oz-recent-trail-depth custom property.
    Deeper folders (closer to the modified file) get brighter highlights.
    Uses a gentle curve: starts at 6% and increases ~6% per level, reaching ~42%
    at depth 6+. This makes the transition between levels smooth and subtle. */
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 1"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 6%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 6%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 2"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 12%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 12%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 3"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 18%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 18%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 4"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 25%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 25%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 5"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 32%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 32%, transparent) !important;
 }
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 6"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 7"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 8"],
 .oz-folder-element.oz-recent-folder-trail[style*="--oz-recent-trail-depth: 9"] {
-    background-color: color-mix(in srgb, var(--oz-fta-recent-folder-primary-color) 40%, transparent) !important;
+    background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 40%, transparent) !important;
 }
 
 .oz-folder-element.oz-recent-folder-trail .oz-folder-name {
-    color: var(--oz-fta-recent-folder-primary-color);
+    color: var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color));
 }
 
 /* Solution for React-Icon Center Issue */

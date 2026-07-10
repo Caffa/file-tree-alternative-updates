@@ -152,6 +152,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
     async loadSettings() {
         const savedData = await this.loadData();
         this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+        // Migrate recentFoldersCount from string (dropdown) to number
+        if (typeof (this.settings as any).recentFoldersCount === 'string') {
+            (this.settings as any).recentFoldersCount = parseInt((this.settings as any).recentFoldersCount, 10) || 1;
+        }
     }
 
     async saveSettings() {
@@ -434,9 +438,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 // Prune stale entries (folders that no longer exist)
                 this.pruneRecentFoldersCache(folderMtimes);
                 // Derive display maps from the raw cache
-                const { recentFolders, folderDepth } = deriveRecentFolders(folderMtimes, this.app);
+                const { recentFolders, folderDepth, folderTrailIndex } = deriveRecentFolders(folderMtimes, this.app, this.settings.recentFoldersCount);
                 usePluginStore.getState().setRecentModifiedFolders(recentFolders);
                 usePluginStore.getState().setRecentFolderDepth(folderDepth);
+                usePluginStore.getState().setRecentFolderTrailIndex(folderTrailIndex);
                 usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
             }
         } catch (e) {
@@ -523,9 +528,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
         }
 
         // Derive display maps
-        const { recentFolders, folderDepth } = deriveRecentFolders(folderMtimes, this.app);
+        const { recentFolders, folderDepth, folderTrailIndex } = deriveRecentFolders(folderMtimes, this.app, this.settings.recentFoldersCount);
         usePluginStore.getState().setRecentModifiedFolders(recentFolders);
         usePluginStore.getState().setRecentFolderDepth(folderDepth);
+        usePluginStore.getState().setRecentFolderTrailIndex(folderTrailIndex);
         usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
 
         // Persist to localStorage
