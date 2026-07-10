@@ -66,7 +66,7 @@ export function FileComponent(props: FilesProps) {
     // Folder Name Update once Active Folder Path Change
     useEffect(() => setTreeHeader(Util.getFolderName(activeFolderPath, plugin.app)), [activeFolderPath]);
 
-    // Breadcrumb segments for overrideFolderClick setting
+    // Jump Panel: clickable breadcrumb path for navigating folders
     const breadcrumbSegments = useMemo(
         () => (plugin.settings.overrideFolderClick ? Util.getBreadcrumbSegments(activeFolderPath, plugin.app) : null),
         [activeFolderPath, plugin.settings.overrideFolderClick]

@@ -220,9 +220,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
     // (the path bar at the top of a note) to reveal the folder in File Tree
     // Alternative instead of the native file explorer. Mirrors the bookmarks
     // capture-phase interception pattern above.
-    private readonly BREADCRUMB_FOLDER_SELECTOR = '.view-header-breadcrumb-folder';
-    private readonly BREADCRUMB_CONTAINER_SELECTOR = '.view-header-breadcrumb';
-    private readonly BREADCRUMB_FILE_SELECTOR = '.view-header-breadcrumb-file';
+    private readonly BREADCRUMB_FOLDER_SELECTOR = 'a.view-header-breadcrumb';
+    private readonly BREADCRUMB_CONTAINER_SELECTOR = '.view-header-title-parents';
 
     breadcrumbEventHandler = (event: Event) => {
         const evt = event as MouseEvent;
@@ -237,14 +236,23 @@ export default class FileTreeAlternativePlugin extends Plugin {
         const container = target.closest(this.BREADCRUMB_CONTAINER_SELECTOR);
         if (!container) return;
 
-        // Must be a folder segment (not the trailing file-name segment).
+        // Must be a breadcrumb folder link (<a class="view-header-breadcrumb">).
         const folderEl = target.closest(this.BREADCRUMB_FOLDER_SELECTOR) as HTMLElement | null;
-        if (!folderEl || folderEl.classList.contains('view-header-breadcrumb-file')) return;
+        if (!folderEl) return;
 
-        // Resolve the folder path. Prefer explicit attributes, then reconstruct
-        // from the active file's path + the clicked segment's position.
+        // Resolve the folder path. Prefer explicit data-path attribute, then
+        // reconstruct from the active file's path + segment position.
         const folderPath = this.resolveBreadcrumbFolderPath(folderEl, container as HTMLElement);
-        if (!folderPath) return;
+        if (folderPath === null) return;
+
+        // Handle root path — reveal vault root.
+        if (folderPath === '') {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            const root = this.app.vault.getRoot();
+            if (root) this.revealFolderInTree(root);
+            return;
+        }
 
         const folder = this.app.vault.getAbstractFileByPath(folderPath);
         if (!folder || !(folder instanceof TFolder)) return;
@@ -262,38 +270,50 @@ export default class FileTreeAlternativePlugin extends Plugin {
      * breadcrumb DOM. Falls back to reconstructing from the active file path.
      */
     private resolveBreadcrumbFolderPath(folderEl: HTMLElement, container: HTMLElement): string | null {
-        // Strategy 1: explicit data/aria attributes.
+        // Strategy 1: explicit data-path attribute (current Obsidian provides this).
         const dataPath = folderEl.getAttribute('data-path');
-        if (dataPath) return dataPath === '/' || dataPath === '' ? '' : dataPath;
+        if (dataPath) {
+            // Normalize root path
+            return dataPath === '/' ? '' : dataPath;
+        }
         const ariaLabel = folderEl.getAttribute('aria-label');
         if (ariaLabel && ariaLabel.trim() !== '') return ariaLabel;
 
-        // Strategy 2: reconstruct from active file path + segment index.
+        // Strategy 2: reconstruct from active file path + segment position.
+        // In current Obsidian, all <a class="view-header-breadcrumb"> elements
+        // inside .view-header-title-parents are folder/vault links (no file segment).
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return null;
 
         const segments = Array.from(
-            container.querySelectorAll(`${this.BREADCRUMB_FOLDER_SELECTOR}, ${this.BREADCRUMB_FILE_SELECTOR}`)
+            container.querySelectorAll(this.BREADCRUMB_FOLDER_SELECTOR)
         );
         const clickedIndex = segments.indexOf(folderEl);
         if (clickedIndex === -1) {
-            // Folder not in the segment list (e.g. vault-root link); reveal root.
+            // Element not found in segment list — treat as vault root.
             return '';
         }
 
-        // activeFile.parent.path is the folder containing the file. The file is
-        // the last segment; folders precede it. Count folder segments up to and
-        // including the clicked one to determine how deep the clicked folder is.
-        const fileIndex = segments.length - 1; // file is last
-        if (clickedIndex >= fileIndex) return activeFile.parent?.path ?? '';
+        // The last breadcrumb segment corresponds to the file's parent folder.
+        // Segments before it are ancestor folders.
+        // clickedIndex 0 = vault root, clickedIndex 1 = first folder, etc.
+        if (clickedIndex === 0) return ''; // vault root
 
-        // Depth from the clicked folder to the file's parent.
-        const depthBelowClicked = fileIndex - 1 - clickedIndex;
-        let folder = activeFile.parent;
-        for (let i = 0; i < depthBelowClicked && folder; i++) {
-            folder = folder.parent;
+        // Walk up from the file's parent folder to the correct depth.
+        const folderPathParts: string[] = [];
+        for (let i = 1; i <= clickedIndex && i < segments.length; i++) {
+            const seg = segments[i] as HTMLElement;
+            const segDataPath = seg.getAttribute('data-path');
+            if (segDataPath) {
+                folderPathParts.push(segDataPath);
+            } else {
+                // Fallback: use text content as folder name
+                const text = seg.textContent?.trim();
+                if (text) folderPathParts.push(text);
+            }
         }
-        return folder ? folder.path : '';
+        const resolvedPath = folderPathParts.join('/');
+        return resolvedPath || null;
     }
 
     breadcrumbAddEventListener = () => {

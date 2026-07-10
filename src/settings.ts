@@ -306,19 +306,16 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: 'Override Folder Click',
-                        desc: `When enabled, clicking on any folder name in the file path header navigates within Filetree Alternative`
-                            + ` instead of opening the Obsidian native file explorer. The folder path becomes a clickable breadcrumb.`,
+                        name: 'Jump Panel',
+                        desc: 'When enabled, a clickable breadcrumb path appears at the top of the file pane. Click any folder in the path to jump directly to that folder in the tree view. For example: Vault › Projects › Novel › Chapters — clicking "Projects" takes you straight to the Projects folder.',
                         control: {
                             type: 'toggle' as const,
                             key: 'overrideFolderClick' as const,
                         },
                     },
                     {
-                        name: 'Intercept Native Breadcrumb Folder Clicks',
-                        desc: `When enabled, clicking a folder in Obsidian's native file path (the breadcrumb at the top of a note)`
-                            + ` opens that folder in File Tree Alternative instead of revealing it in the Obsidian native file explorer.`
-                            + ` Ctrl/Cmd-click and middle-click are left untouched (native behavior).`,
+                        name: 'Redirect Note Breadcrumb Clicks',
+                        desc: `When enabled, clicking a folder in Obsidian's note breadcrumb (the path at the top of an open note, like "Vault › Projects › Notes") opens that folder in the File Tree Alternative sidebar instead of the native file explorer. Ctrl/Cmd-click and middle-click still use native behavior.`,
                         control: {
                             type: 'toggle' as const,
                             key: 'interceptNativeBreadcrumb' as const,
