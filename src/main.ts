@@ -221,12 +221,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     // --- Native breadcrumb folder-click interception ---
-    // Redirects clicks on folder segments in Obsidian's native note breadcrumb
+    // Redirects clicks on folder spans in Obsidian's native note breadcrumb
     // (the path bar at the top of a note) to reveal the folder in File Tree
     // Alternative instead of the native file explorer. Mirrors the bookmarks
     // capture-phase interception pattern above.
-    private readonly BREADCRUMB_FOLDER_SELECTOR = 'a.view-header-breadcrumb';
-    private readonly BREADCRUMB_CONTAINER_SELECTOR = '.view-header-title-parents';
+    private readonly BREADCRUMB_FOLDER_SELECTOR = '.view-header-breadcrumb';
+    private readonly BREADCRUMB_CONTAINER_SELECTOR = '.view-header-title-parent';
 
     breadcrumbEventHandler = (event: Event) => {
         const evt = event as MouseEvent;
@@ -241,12 +241,13 @@ export default class FileTreeAlternativePlugin extends Plugin {
         const container = target.closest(this.BREADCRUMB_CONTAINER_SELECTOR);
         if (!container) return;
 
-        // Must be a breadcrumb folder link (<a class="view-header-breadcrumb">).
+        // Must be a breadcrumb folder span (Obsidian renders these as
+        // <span class="view-header-breadcrumb">).
         const folderEl = target.closest(this.BREADCRUMB_FOLDER_SELECTOR) as HTMLElement | null;
         if (!folderEl) return;
 
-        // Resolve the folder path. Prefer explicit data-path attribute, then
-        // reconstruct from the active file's path + segment position.
+        // Resolve the folder path by reconstructing from the active file's
+        // parent path and the segment position within the breadcrumb.
         const folderPath = this.resolveBreadcrumbFolderPath(folderEl, container as HTMLElement);
         if (folderPath === null) return;
 
@@ -272,53 +273,30 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
     /**
      * Best-effort extraction of the clicked folder's vault path from the
-     * breadcrumb DOM. Falls back to reconstructing from the active file path.
+     * breadcrumb DOM. Obsidian's breadcrumb spans don't carry data attributes —
+     * the folder path is only available via closure in Obsidian's own click
+     * handler. We reconstruct it from the active file's parent path and the
+     * segment position within the breadcrumb container.
      */
     private resolveBreadcrumbFolderPath(folderEl: HTMLElement, container: HTMLElement): string | null {
-        // Strategy 1: explicit data-path attribute (current Obsidian provides this).
-        const dataPath = folderEl.getAttribute('data-path');
-        if (dataPath) {
-            // Normalize root path
-            return dataPath === '/' ? '' : dataPath;
-        }
-        const ariaLabel = folderEl.getAttribute('aria-label');
-        if (ariaLabel && ariaLabel.trim() !== '') return ariaLabel;
-
-        // Strategy 2: reconstruct from active file path + segment position.
-        // In current Obsidian, all <a class="view-header-breadcrumb"> elements
-        // inside .view-header-title-parents are folder/vault links (no file segment).
         const activeFile = this.app.workspace.getActiveFile();
-        if (!activeFile) return null;
+        if (!activeFile || !activeFile.parent) return null;
 
         const segments = Array.from(
             container.querySelectorAll(this.BREADCRUMB_FOLDER_SELECTOR)
         );
         const clickedIndex = segments.indexOf(folderEl);
-        if (clickedIndex === -1) {
-            // Element not found in segment list — treat as vault root.
-            return '';
-        }
+        if (clickedIndex === -1) return null;
 
-        // The last breadcrumb segment corresponds to the file's parent folder.
-        // Segments before it are ancestor folders.
-        // clickedIndex 0 = vault root, clickedIndex 1 = first folder, etc.
-        if (clickedIndex === 0) return ''; // vault root
+        const parentPath = activeFile.parent.path;
+        // Root path (empty string or "/") is handled separately by the caller.
+        if (!parentPath || parentPath === '/') return '';
 
-        // Walk up from the file's parent folder to the correct depth.
-        const folderPathParts: string[] = [];
-        for (let i = 1; i <= clickedIndex && i < segments.length; i++) {
-            const seg = segments[i] as HTMLElement;
-            const segDataPath = seg.getAttribute('data-path');
-            if (segDataPath) {
-                folderPathParts.push(segDataPath);
-            } else {
-                // Fallback: use text content as folder name
-                const text = seg.textContent?.trim();
-                if (text) folderPathParts.push(text);
-            }
-        }
-        const resolvedPath = folderPathParts.join('/');
-        return resolvedPath || null;
+        const parts = parentPath.split('/');
+        // clickedIndex maps to the first (clickedIndex + 1) segments of parentPath.
+        // Obsidian renders breadcrumbs from file.parent.path.split("/"), where
+        // span[0] = parts[0], span[1] = parts[1], etc.
+        return parts.slice(0, clickedIndex + 1).join('/');
     }
 
     breadcrumbAddEventListener = () => {
