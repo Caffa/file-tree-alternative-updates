@@ -42,7 +42,7 @@ export interface FileTreeAlternativePluginSettings {
     overrideFolderClick: boolean;
     interceptNativeBreadcrumb: boolean;
     highlightRecentFolders: boolean;
-    recentFoldersCount: number;
+    recentFoldersCount: string;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -77,7 +77,7 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     overrideFolderClick: false,
     interceptNativeBreadcrumb: false,
     highlightRecentFolders: true,
-    recentFoldersCount: 2,
+    recentFoldersCount: '2',
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -312,7 +312,7 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         control: {
                             type: 'dropdown' as const,
                             key: 'recentFoldersCount' as const,
-                            options: { 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' },
+                            options: { '1': '1', '2': '2', '3': '3', '4': '4', '5': '5' },
                         },
                     },
                 ],

@@ -119,9 +119,13 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         setInitialActiveFolderPath();
         if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
         // Compute initial recent folders
-        const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-        setRecentModifiedFolders(recentFolders);
-        setRecentFolderDepth(folderDepth);
+        try {
+            const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
+            setRecentModifiedFolders(recentFolders);
+            setRecentFolderDepth(folderDepth);
+        } catch (e) {
+            console.warn('File Tree Alternative: Failed to compute recent folders on mount', e);
+        }
     }, []);
 
     // Each Focused Folder Change triggers new folder tree build
@@ -159,9 +163,13 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     useEffect(() => {
         const recomputeRecentFolders = () => {
             if (plugin.settings.highlightRecentFolders) {
-                const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-                setRecentModifiedFolders(recentFolders);
-                setRecentFolderDepth(folderDepth);
+                try {
+                    const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
+                    setRecentModifiedFolders(recentFolders);
+                    setRecentFolderDepth(folderDepth);
+                } catch (e) {
+                    console.warn('File Tree Alternative: Failed to compute recent folders on settings change', e);
+                }
             } else {
                 setRecentModifiedFolders(new Map());
                 setRecentFolderDepth(new Map());
@@ -371,9 +379,13 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
         // Recompute recently modified folders on vault changes
         if (plugin.settings.highlightRecentFolders) {
-            const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
-            setRecentModifiedFolders(recentFolders);
-            setRecentFolderDepth(folderDepth);
+            try {
+                const { recentFolders, folderDepth } = FileTreeUtils.computeRecentFolders(plugin);
+                setRecentModifiedFolders(recentFolders);
+                setRecentFolderDepth(folderDepth);
+            } catch (e) {
+                console.warn('File Tree Alternative: Failed to compute recent folders on vault change', e);
+            }
         }
     }
 

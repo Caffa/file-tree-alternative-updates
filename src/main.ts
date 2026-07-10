@@ -398,8 +398,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
             usePluginStore.getState().setRecentFolderDepth(new Map());
             return;
         }
-        const { recentFolders, folderDepth } = computeRecentFolders(this);
-        usePluginStore.getState().setRecentModifiedFolders(recentFolders);
-        usePluginStore.getState().setRecentFolderDepth(folderDepth);
+        try {
+            const { recentFolders, folderDepth } = computeRecentFolders(this);
+            usePluginStore.getState().setRecentModifiedFolders(recentFolders);
+            usePluginStore.getState().setRecentFolderDepth(folderDepth);
+        } catch (e) {
+            console.warn('File Tree Alternative: Failed to refresh recent folders', e);
+        }
     };
 }
