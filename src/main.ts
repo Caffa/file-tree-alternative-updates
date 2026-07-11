@@ -417,10 +417,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 this.pruneRecentFoldersCache(folderMtimes);
                 // Derive display maps from the raw cache
                 const { recentFolders, folderDepth, folderTrailIndex } = deriveRecentFolders(folderMtimes, this.app, this.settings.recentFoldersCount);
-                usePluginStore.getState().setRecentModifiedFolders(recentFolders);
-                usePluginStore.getState().setRecentFolderDepth(folderDepth);
-                usePluginStore.getState().setRecentFolderTrailIndex(folderTrailIndex);
-                usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
+                usePluginStore.getState().setRecentFolderState({
+                    recentModifiedFolders: recentFolders,
+                    recentFolderDepth: folderDepth,
+                    recentFolderTrailIndex: folderTrailIndex,
+                    recentFolderMtimes: folderMtimes,
+                });
             }
         } catch (e) {
             console.warn('File Tree Alternative: Failed to load recent folders cache', e);
@@ -460,11 +462,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     /**
-     * Apply incremental update to the folderMtimes map and persist to localStorage.
+     * Pure map mutation — updates the folderMtimes map in-place for a single vault event.
+     * Does NOT call deriveRecentFolders, does NOT update store, does NOT persist.
      */
-    private doRecentFolderUpdate = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
-        const folderMtimes = new Map(usePluginStore.getState().recentFolderMtimes);
-
+    private applyRecentFolderEvent = (folderMtimes: Map<string, number>, file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
         if (eventType === 'modify' || eventType === 'create') {
             if (file instanceof TFile) {
                 const mtime = file.stat.mtime;
@@ -478,12 +479,10 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 }
             }
         } else if (eventType === 'delete') {
-            // Remove the deleted file's contribution from its parent chain
             if (file instanceof TFile && file.parent) {
                 this.recomputeFolderMtime(folderMtimes, file.parent);
             }
         } else if (eventType === 'rename') {
-            // Remove old path contributions and add new path contributions
             if (file instanceof TFile && oldPath) {
                 const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
                 if (oldParentPath) {
@@ -492,7 +491,6 @@ export default class FileTreeAlternativePlugin extends Plugin {
                         this.recomputeFolderMtime(folderMtimes, oldFolder);
                     }
                 }
-                // Add new path
                 const mtime = file.stat.mtime;
                 let folder = file.parent;
                 while (folder) {
@@ -504,15 +502,21 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 }
             }
         }
+    };
 
-        // Derive display maps
+    /**
+     * Derive display maps from the folderMtimes, batch-update the Zustand store
+     * in a single call, and persist to localStorage.
+     */
+    private finalizeRecentFolderUpdate = (folderMtimes: Map<string, number>) => {
         const { recentFolders, folderDepth, folderTrailIndex } = deriveRecentFolders(folderMtimes, this.app, this.settings.recentFoldersCount);
-        usePluginStore.getState().setRecentModifiedFolders(recentFolders);
-        usePluginStore.getState().setRecentFolderDepth(folderDepth);
-        usePluginStore.getState().setRecentFolderTrailIndex(folderTrailIndex);
-        usePluginStore.getState().setRecentFolderMtimes(folderMtimes);
+        usePluginStore.getState().setRecentFolderState({
+            recentModifiedFolders: recentFolders,
+            recentFolderDepth: folderDepth,
+            recentFolderTrailIndex: folderTrailIndex,
+            recentFolderMtimes: folderMtimes,
+        });
 
-        // Persist to localStorage
         try {
             localStorage.setItem(this.keys.recentFoldersCacheKey, JSON.stringify(Array.from(folderMtimes.entries())));
         } catch (e) {
@@ -572,15 +576,22 @@ export default class FileTreeAlternativePlugin extends Plugin {
             const queue = [...this.recentFolderUpdateQueue];
             this.recentFolderUpdateQueue = [];
             this.recentFolderUpdateTimer = null;
-            // Process the last event for each unique file path
+
+            // Single map copy for the entire batch
+            const folderMtimes = new Map(usePluginStore.getState().recentFolderMtimes);
+
+            // Process the last event for each unique file path, mutating the same map
             const seen = new Set<string>();
             for (let i = queue.length - 1; i >= 0; i--) {
                 const item = queue[i];
                 const key = item.file.path + item.eventType;
                 if (seen.has(key)) continue;
                 seen.add(key);
-                this.doRecentFolderUpdate(item.file, item.eventType as any, item.oldPath);
+                this.applyRecentFolderEvent(folderMtimes, item.file, item.eventType as any, item.oldPath);
             }
+
+            // Single derive + store update + localStorage persist
+            this.finalizeRecentFolderUpdate(folderMtimes);
         }, 200);
     };
 }

@@ -38,6 +38,12 @@ interface PluginStoreActions {
     setRecentFolderDepth: (depth: Map<string, number>) => void;
     setRecentFolderMtimes: (mtimes: Map<string, number>) => void;
     setRecentFolderTrailIndex: (index: Map<string, number>) => void;
+    setRecentFolderState: (state: {
+        recentModifiedFolders: Map<string, number>;
+        recentFolderDepth: Map<string, number>;
+        recentFolderMtimes: Map<string, number>;
+        recentFolderTrailIndex: Map<string, number>;
+    }) => void;
 }
 
 export type PluginStore = PluginStoreState & PluginStoreActions;
@@ -78,4 +84,5 @@ export const usePluginStore = create<PluginStore>()((set) => ({
     setRecentFolderDepth: (recentFolderDepth) => set({ recentFolderDepth }),
     setRecentFolderMtimes: (recentFolderMtimes) => set({ recentFolderMtimes }),
     setRecentFolderTrailIndex: (recentFolderTrailIndex) => set({ recentFolderTrailIndex }),
+    setRecentFolderState: (state) => set(state),
 }));
