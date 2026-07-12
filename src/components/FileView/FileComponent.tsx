@@ -147,6 +147,19 @@ export function FileComponent(props: FilesProps) {
         [excludedFolders, excludedExtensions, ozPinnedFiles, ozFileList, plugin.settings.sortFilesBy, plugin.settings.sortReverse]
     );
 
+    // Compute recency ranks: map file path → rank (0 = most recent, undefined = not highlighted)
+    const recentFileRanks = useMemo(() => {
+        const ranks = new Map<string, number>();
+        if (!plugin.settings.highlightRecentFiles) return ranks;
+        const count = plugin.settings.recentFilesCount;
+        // Sort files by mtime descending (most recent first)
+        const sorted = [...ozFileList].sort((a, b) => (b.stat?.mtime ?? 0) - (a.stat?.mtime ?? 0));
+        for (let i = 0; i < Math.min(count, sorted.length); i++) {
+            ranks.set(sorted[i].path, i);
+        }
+        return ranks;
+    }, [ozFileList, plugin.settings.highlightRecentFiles, plugin.settings.recentFilesCount]);
+
     // Go Back Button - Sets Main Component View to Folder
     const handleGoBack = (e: React.MouseEvent) => {
         setView('folder');
@@ -357,7 +370,7 @@ export function FileComponent(props: FilesProps) {
                         {filesToList.map((file, index) => {
                             return (
                                 <LazyLoad height={22} key={index}>
-                                    <NavFile file={file} plugin={plugin} />
+                                    <NavFile file={file} plugin={plugin} recentRank={recentFileRanks.get(file.path)} />
                                 </LazyLoad>
                             );
                         })}
@@ -371,8 +384,8 @@ export function FileComponent(props: FilesProps) {
 
 /* ----------- SINGLE NAVFILE ELEMENT ----------- */
 
-const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin }) => {
-    const { file, plugin } = props;
+const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin; recentRank?: number }) => {
+    const { file, plugin, recentRank } = props;
 
     const ozPinnedFiles = usePluginStore((s) => s.ozPinnedFileList);
     const setOzPinnedFiles = usePluginStore((s) => s.setOzPinnedFileList);
@@ -419,9 +432,16 @@ const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin }) => 
         return plugin.settings.showFileNameAsFullPath ? Util.getFileNameAndExtension(file.path).fileName : file.basename;
     }, [plugin.settings.showFileNameAsFullPath, file.path]);
 
+    const recentFileClass = useMemo(() => {
+        if (recentRank !== undefined && recentRank < plugin.settings.recentFilesCount) {
+            return ` oz-recent-file-${recentRank}`;
+        }
+        return '';
+    }, [recentRank, plugin.settings.recentFilesCount]);
+
     return (
         <div
-            className={'oz-nav-file' + (activeOzFile && activeOzFile.path === file.path ? ' is-active' : '')}
+            className={'oz-nav-file' + (activeOzFile && activeOzFile.path === file.path ? ' is-active' : '') + recentFileClass}
             key={file.path}
             draggable
             onDragStart={(e) =>

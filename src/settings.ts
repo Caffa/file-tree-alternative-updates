@@ -43,6 +43,8 @@ export interface FileTreeAlternativePluginSettings {
     interceptNativeBreadcrumb: boolean;
     highlightRecentFolders: boolean;
     recentFoldersCount: number;
+    highlightRecentFiles: boolean;
+    recentFilesCount: number;
 }
 
 export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
@@ -78,6 +80,8 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     interceptNativeBreadcrumb: false,
     highlightRecentFolders: true,
     recentFoldersCount: 1,
+    highlightRecentFiles: true,
+    recentFilesCount: 3,
 };
 
 export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
@@ -347,6 +351,31 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         },
                     },
 
+                ],
+            },
+
+            // ---- Recently Modified Files ----
+            {
+                type: 'group' as const,
+                heading: 'Recently Modified Files',
+                items: [
+                    {
+                        name: 'Highlight Recently Modified Files',
+                        desc: 'Turn on to highlight recently modified files in the file pane with a visual gradient based on recency.',
+                        control: {
+                            type: 'toggle' as const,
+                            key: 'highlightRecentFiles' as const,
+                        },
+                    },
+                    {
+                        name: 'Recent Files Count',
+                        desc: 'How many of the most recently modified files to highlight (1-5). The most recent gets the brightest highlight.',
+                        control: {
+                            type: 'dropdown' as const,
+                            key: 'recentFilesCount' as const,
+                            options: { 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' },
+                        },
+                    },
                 ],
             },
 

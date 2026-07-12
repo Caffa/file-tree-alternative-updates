@@ -145,6 +145,23 @@ settings:
         type: variable-color
         format: hex
         default: '#2ecc71'
+
+# Recently Modified Files Styles
+
+    -
+        id: oz-fta-recent-file-heading
+        title: Recently Modified Files
+        description: Style settings for recently modified file highlighting
+        type: heading
+        level: 2
+        collapsed: true
+    -
+        id: oz-fta-recent-file-color
+        title: Recently Modified Files | Highlight Color
+        description: Set the highlight color for recently modified files. Defaults to your theme's accent color.
+        type: variable-color
+        format: hex
+        default: '#'
 */
 
 .theme-light,
@@ -164,6 +181,7 @@ settings:
     --oz-fta-recent-trail-0-color: var(--interactive-accent);
     --oz-fta-recent-trail-1-color: #e67e22;
     --oz-fta-recent-trail-2-color: #2ecc71;
+    --oz-fta-recent-file-color: var(--interactive-accent);
 }
 
 .oz-file-tree-header {
@@ -620,6 +638,42 @@ svg.oz-folder-toggle path {
 
 .oz-folder-element.oz-recent-folder-trail .oz-folder-name {
     color: var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color));
+}
+
+/* Recently Modified Files Styles */
+
+/* Level 0 (most recent) */
+.oz-nav-file.oz-recent-file-0 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) 25%, transparent);
+    border-radius: 3px;
+}
+
+.oz-nav-file.oz-recent-file-0 .oz-nav-file-title {
+    color: var(--text-normal);
+}
+
+/* Level 1 */
+.oz-nav-file.oz-recent-file-1 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) 15%, transparent);
+    border-radius: 3px;
+}
+
+/* Level 2 */
+.oz-nav-file.oz-recent-file-2 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) 8%, transparent);
+    border-radius: 3px;
+}
+
+/* Level 3 */
+.oz-nav-file.oz-recent-file-3 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) 4%, transparent);
+    border-radius: 3px;
+}
+
+/* Level 4 */
+.oz-nav-file.oz-recent-file-4 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) 2%, transparent);
+    border-radius: 3px;
 }
 
 /* Solution for React-Icon Center Issue */

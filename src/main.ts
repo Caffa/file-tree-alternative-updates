@@ -455,9 +455,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
     /** Clear all recent folders data from store and localStorage. */
     clearRecentFolders = () => {
-        usePluginStore.getState().setRecentModifiedFolders(new Map());
-        usePluginStore.getState().setRecentFolderDepth(new Map());
-        usePluginStore.getState().setRecentFolderMtimes(new Map());
+        usePluginStore.getState().setRecentFolderState({
+            recentModifiedFolders: new Map(),
+            recentFolderDepth: new Map(),
+            recentFolderMtimes: new Map(),
+            recentFolderTrailIndex: new Map(),
+        });
         localStorage.removeItem(this.keys.recentFoldersCacheKey);
     };
 
