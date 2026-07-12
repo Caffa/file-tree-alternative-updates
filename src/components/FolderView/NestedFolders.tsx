@@ -36,6 +36,9 @@ export function NestedFolders(props: NestedFoldersProps) {
         setActiveFolderPath(folder.path);
     };
 
+    // Global State for folder mtimes (used by 'last-update' sort)
+    const recentFolderMtimes = usePluginStore((s) => s.recentFolderMtimes);
+
     const getSortedFolderTree = (folderTree: FolderTree[]) => {
         let newTree: FolderTree[] = folderTree;
         newTree = newTree.sort((a, b) => {
@@ -45,6 +48,10 @@ export function NestedFolders(props: NestedFoldersProps) {
                 let aCount = folderFileCountMap[a.folder.path] ? folderFileCountMap[a.folder.path].closed : 0;
                 let bCount = folderFileCountMap[b.folder.path] ? folderFileCountMap[b.folder.path].closed : 0;
                 return bCount - aCount;
+            } else if (plugin.settings.sortFoldersBy === 'last-update') {
+                let aTime = recentFolderMtimes.get(a.folder.path) || 0;
+                let bTime = recentFolderMtimes.get(b.folder.path) || 0;
+                return bTime - aTime; // most recently modified first
             }
         });
         return newTree;
@@ -216,7 +223,7 @@ export function NestedFolders(props: NestedFoldersProps) {
 
     let sortedFolderTree = useMemo(
         () => getSortedFolderTree(props.folderTree.children),
-        [props.folderTree.children, excludedFolders, plugin.settings.sortFoldersBy]
+        [props.folderTree.children, excludedFolders, plugin.settings.sortFoldersBy, recentFolderMtimes]
     );
 
     return (

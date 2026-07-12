@@ -110,21 +110,21 @@ export function MainFolder(props: FolderProps) {
             forceUpdate();
         };
 
-        sortMenu.addItem((menuItem) => {
-            menuItem.setTitle('Folder Name (A to Z)');
-            menuItem.onClick((ev: MouseEvent) => {
-                changeSortSettingTo('name');
+        const addMenuItem = (label: string, order: string, value: FolderSortType) => {
+            sortMenu.addItem((menuItem) => {
+                menuItem.setTitle(`${label} (${order})`);
+                menuItem.setIcon(value === plugin.settings.sortFoldersBy ? 'checkmark' : 'spaceIcon');
+                menuItem.onClick(() => changeSortSettingTo(value));
             });
-        });
+        };
+
+        addMenuItem('Folder Name', 'A to Z', 'name');
 
         if (plugin.settings.folderCount) {
-            sortMenu.addItem((menuItem) => {
-                menuItem.setTitle('Item Numbers (Bigger to Smaller)');
-                menuItem.onClick((ev: MouseEvent) => {
-                    changeSortSettingTo('item-number');
-                });
-            });
+            addMenuItem('Item Numbers', 'Bigger to Smaller', 'item-number');
         }
+
+        addMenuItem('Recently Modified', 'New to Old', 'last-update');
 
         // Trigger
         plugin.app.workspace.trigger('sort-menu', sortMenu);

@@ -258,7 +258,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                     // If the file is modified but sorting is not last-update to not component update unnecessarily, return
                     let sortFilesBy = plugin.settings.sortFilesBy;
                     if (changeType === 'modify') {
-                        if (!(sortFilesBy === 'last-update' || sortFilesBy === 'file-size')) {
+                        let sortFoldersBy = plugin.settings.sortFoldersBy;
+                        if (!(sortFilesBy === 'last-update' || sortFilesBy === 'file-size' || sortFoldersBy === 'last-update')) {
                             return;
                         }
                     }
