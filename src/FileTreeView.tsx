@@ -32,7 +32,10 @@ export class FileTreeView extends ItemView {
     }
 
     destroy() {
-        if (this.root) this.root.unmount();
+        if (this.root) {
+            this.root.unmount();
+            this.root = null;
+        }
     }
 
     async onOpen(): Promise<void> {

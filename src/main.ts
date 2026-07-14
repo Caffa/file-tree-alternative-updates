@@ -55,6 +55,18 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 await this.openFileTreeLeaf(true);
                 this.viewOpenedOnStart = true;
             }
+            // Lift the guard after layout stabilizes so the panel can be re-opened
+            // later if the user closes it. Use a one-time listener with a small
+            // delay to avoid racing with workspace restoration on mobile.
+            const resetGuard = () => {
+                this.viewOpenedOnStart = false;
+                this.app.workspace.off('layout-change', resetGuard);
+            };
+            setTimeout(() => {
+                this.app.workspace.on('layout-change', resetGuard);
+                // Also schedule a fallback in case no layout-change fires
+                setTimeout(() => { this.viewOpenedOnStart = false; }, 2000);
+            }, 500);
         });
 
         // Listen for layout changes to catch and clean up any duplicate panes
