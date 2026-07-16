@@ -580,6 +580,7 @@ svg.oz-folder-toggle path {
 .oz-folder-element.oz-recent-folder-primary {
     background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 50%, transparent) !important;
     border-radius: 4px;
+    will-change: background-color;
     animation: oz-recent-pulse 2s ease-in-out infinite;
 }
 
@@ -588,10 +589,10 @@ svg.oz-folder-toggle path {
     font-weight: bold;
 }
 
-/* Animate a subtle pulse on the primary folder */
+/* Animate a subtle pulse on the primary folder via background-color (avoids iOS WKWebView opacity compositing bug) */
 @keyframes oz-recent-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.85; }
+    0%, 100% { background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 50%, transparent); }
+    50% { background-color: color-mix(in srgb, var(--oz-recent-trail-color, var(--oz-fta-recent-trail-0-color)) 35%, transparent); }
 }
 
 /* Ancestor trail - depth-based gradient (brighter = deeper = closer to modified file) */
