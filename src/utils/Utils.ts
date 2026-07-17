@@ -305,18 +305,29 @@ export function deriveRecentFolders(
         // Assign trail index to the primary folder itself
         folderTrailIndex.set(folderPath, trailIndex);
 
-        const parts = folderPath.split('/');
-        let current = '';
-        for (let i = 0; i < parts.length; i++) {
-            current = current ? `${current}/${parts[i]}` : parts[i];
-            const depth = i + 1;
-            const existing = folderDepth.get(current);
-            if (existing === undefined || depth > existing) {
-                folderDepth.set(current, depth);
+        // Split path and filter empty strings from leading slash
+        // Reconstruct paths WITH leading '/' to match Obsidian TFolder.path format
+        const parts = folderPath.split('/').filter(Boolean);
+        if (parts.length === 0) {
+            // Root folder "/" — add with leading slash
+            if (!folderDepth.has('/')) {
+                folderDepth.set('/', 0);
             }
-            // Assign trail index to ancestor if not already assigned (first trail wins)
-            if (!folderTrailIndex.has(current)) {
-                folderTrailIndex.set(current, trailIndex);
+            if (!folderTrailIndex.has('/')) {
+                folderTrailIndex.set('/', trailIndex);
+            }
+        } else {
+            for (let i = 0; i < parts.length; i++) {
+                const ancestorPath = '/' + parts.slice(0, i + 1).join('/');
+                const depth = i + 1;
+                const existing = folderDepth.get(ancestorPath);
+                if (existing === undefined || depth > existing) {
+                    folderDepth.set(ancestorPath, depth);
+                }
+                // Assign trail index to ancestor if not already assigned (first trail wins)
+                if (!folderTrailIndex.has(ancestorPath)) {
+                    folderTrailIndex.set(ancestorPath, trailIndex);
+                }
             }
         }
     });
