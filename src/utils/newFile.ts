@@ -1,5 +1,5 @@
 import FileTreeAlternativePlugin from 'main';
-import { TFile, TFolder, App, normalizePath, Notice } from 'obsidian';
+import { TFile, TFolder, App, normalizePath, Notice, getFrontMatterInfo } from 'obsidian';
 import { eventTypes, OZFile } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
 
@@ -41,11 +41,29 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
     return parts.join('\n');
 };
 
+const hasTemplaterFolderTemplate = (app: App, folder: TFolder): boolean => {
+    const templater = (app as any).plugins?.getPlugin?.('templater-obsidian');
+    if (!templater?.settings?.folder_templates) return false;
+    const folderPath = folder.path;
+    return templater.settings.folder_templates.some((entry: any) => {
+        const entryPath = typeof entry === 'string' ? entry : entry?.folder;
+        return entryPath === folderPath;
+    });
+};
+
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
     try {
         const baseName = newFileName.replace(/\.md$/i, '');
         const dir = folder.isRoot() ? '' : folder.path + '/';
         const initialPath = normalizePath(`${dir}${baseName}.md`);
+
+        let createContent = content ?? '';
+        if (hasTemplaterFolderTemplate(plugin.app, folder) && createContent) {
+            const fmInfo = getFrontMatterInfo(createContent);
+            if (createContent.length > fmInfo.contentStart) {
+                createContent = createContent.slice(0, fmInfo.contentStart);
+            }
+        }
 
         let newFile: TFile | null = null;
         for (let i = 0; i < 1000; i++) {
@@ -53,7 +71,7 @@ export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, f
             const existing = plugin.app.vault.getAbstractFileByPath(candidate);
             if (existing) continue;
             try {
-                newFile = await plugin.app.vault.create(candidate, content ?? '');
+                newFile = await plugin.app.vault.create(candidate, createContent);
                 break;
             } catch (err: any) {
                 // Race: something created the file between check and create; try next name.
@@ -66,7 +84,13 @@ export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, f
             return;
         }
 
-        openFile({ file: newFile, app: plugin.app, newLeaf: false });
+        try {
+            await plugin.app.workspace.openLinkText(newFile.path, '/', false);
+        } catch {
+            try {
+                openFile({ file: newFile, app: plugin.app, newLeaf: false });
+            } catch {}
+        }
         eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
     } catch (error: any) {
         new Notice('Failed to create file: ' + (error?.message ?? String(error)));
