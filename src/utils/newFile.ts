@@ -3,7 +3,7 @@ import { TFile, TFolder, App, normalizePath, Notice } from 'obsidian';
 import { eventTypes, OZFile } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
 
-export const openFile = (props: { file: OZFile; app: App; newLeaf: boolean; leafBySplit?: boolean }) => {
+export const openFile = (props: { file: { path: string }; app: App; newLeaf: boolean; leafBySplit?: boolean }) => {
     const { file, app, newLeaf, leafBySplit } = props;
     const fileToOpen = app.vault.getFileByPath(file.path);
     if (!fileToOpen) return;
@@ -44,19 +44,29 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
     try {
         const baseName = newFileName.replace(/\.md$/i, '');
-        const folderPath = folder.path === '/' ? '' : folder.path;
-        const candidate = folderPath ? `${folderPath}/${baseName}` : baseName;
-        const fullPath = normalizePath(await (plugin.app.vault as any).getAvailablePath(candidate, 'md'));
+        const dir = folder.isRoot() ? '' : folder.path + '/';
+        const initialPath = normalizePath(`${dir}${baseName}.md`);
 
-        await plugin.app.vault.create(fullPath, content ?? '');
+        let newFile: TFile | null = null;
+        for (let i = 0; i < 1000; i++) {
+            const candidate = i === 0 ? initialPath : normalizePath(`${dir}${baseName} ${i}.md`);
+            const existing = plugin.app.vault.getAbstractFileByPath(candidate);
+            if (existing) continue;
+            try {
+                newFile = await plugin.app.vault.create(candidate, content ?? '');
+                break;
+            } catch (err: any) {
+                // Race: something created the file between check and create; try next name.
+                if (!/exists/i.test(String(err?.message ?? ''))) throw err;
+            }
+        }
 
-        const newFile = plugin.app.vault.getAbstractFileByPath(fullPath);
-        if (!(newFile instanceof TFile)) {
-            new Notice('Failed to create file: created file could not be resolved');
+        if (!newFile) {
+            new Notice(`Failed to create file: could not find an available name for "${baseName}.md"`);
             return;
         }
 
-        openFile({ file: newFile as unknown as OZFile, app: plugin.app, newLeaf: false });
+        openFile({ file: newFile, app: plugin.app, newLeaf: false });
         eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
     } catch (error: any) {
         new Notice('Failed to create file: ' + (error?.message ?? String(error)));
