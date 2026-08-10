@@ -43,10 +43,10 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
 
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
     try {
-        const baseName = newFileName.endsWith('.md') ? newFileName.slice(0, -3) : newFileName;
+        const baseName = newFileName.replace(/\.md$/i, '');
         const folderPath = folder.path === '/' ? '' : folder.path;
-        const rawPath = folderPath ? `${folderPath}/${baseName}.md` : `${baseName}.md`;
-        const fullPath = normalizePath(await plugin.app.vault.getAvailablePath(rawPath, 'md'));
+        const candidate = folderPath ? `${folderPath}/${baseName}` : baseName;
+        const fullPath = normalizePath(await (plugin.app.vault as any).getAvailablePath(candidate, 'md'));
 
         await plugin.app.vault.create(fullPath, content ?? '');
 
@@ -56,7 +56,7 @@ export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, f
             return;
         }
 
-        openFile({ file: newFile, app: plugin.app, newLeaf: false });
+        openFile({ file: newFile as unknown as OZFile, app: plugin.app, newLeaf: false });
         eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
     } catch (error: any) {
         new Notice('Failed to create file: ' + (error?.message ?? String(error)));
