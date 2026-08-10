@@ -1,5 +1,5 @@
 import FileTreeAlternativePlugin from 'main';
-import { TFile, TFolder, App } from 'obsidian';
+import { TFile, TFolder, App, normalizePath, Notice } from 'obsidian';
 import { eventTypes, OZFile } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
 
@@ -42,10 +42,25 @@ export const getFileCreateString = (params: { plugin: FileTreeAlternativePlugin;
 };
 
 export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, folder: TFolder, newFileName: string, content?: string) => {
-    const newFile = await (plugin.app.fileManager as any).createNewMarkdownFile(folder, newFileName);
-    if (content && content !== '') await plugin.app.vault.modify(newFile, content);
-    openFile({ file: newFile, app: plugin.app, newLeaf: false });
-    eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
+    try {
+        const baseName = newFileName.endsWith('.md') ? newFileName.slice(0, -3) : newFileName;
+        const folderPath = folder.path === '/' ? '' : folder.path;
+        const rawPath = folderPath ? `${folderPath}/${baseName}.md` : `${baseName}.md`;
+        const fullPath = normalizePath(await plugin.app.vault.getAvailablePath(rawPath, 'md'));
+
+        await plugin.app.vault.create(fullPath, content ?? '');
+
+        const newFile = plugin.app.vault.getAbstractFileByPath(fullPath);
+        if (!(newFile instanceof TFile)) {
+            new Notice('Failed to create file: created file could not be resolved');
+            return;
+        }
+
+        openFile({ file: newFile, app: plugin.app, newLeaf: false });
+        eventBus.emit(eventTypes.activeFileChange, { filePath: newFile.path });
+    } catch (error: any) {
+        new Notice('Failed to create file: ' + (error?.message ?? String(error)));
+    }
 };
 
 export const openFileInNewTab = (app: App, file: OZFile) => {
