@@ -4,6 +4,28 @@ import { FolderFileCountMap, FolderTree, OZFile, BookmarksPluginItem } from 'uti
 import { VaultChangeModal } from 'modals';
 import { usePluginStore } from '../recoil/pluginStore';
 
+export interface FileVisibilityOptions {
+    excludedExtensions: string[];
+    excludedFolders: string[];
+    hideAttachments: boolean;
+    attachmentsFolderName: string;
+    /** 'notes' counts only markdown files; undefined/'files' counts everything */
+    folderCountOption?: string;
+    /** exclude folder notes (basename === parent folder name) from counts */
+    excludeFolderNotes?: boolean;
+}
+
+// Single source of truth for whether a file is visible in listings AND counted in folder badges,
+// so the badge number can never disagree with what clicking the folder shows.
+export const isFileVisibleInList = (file: TFile, opts: FileVisibilityOptions): boolean => {
+    if (opts.excludedExtensions.includes(file.extension)) return false;
+    if (opts.hideAttachments && file.path.toLowerCase().includes(opts.attachmentsFolderName.toLowerCase())) return false;
+    if (file.parent && opts.excludedFolders.includes(file.parent.path)) return false;
+    if (opts.folderCountOption === 'notes' && file.extension !== 'md') return false;
+    if (opts.excludeFolderNotes && file.extension === 'md' && file.basename === file.parent?.name) return false;
+    return true;
+};
+
 // Helper Function To Get List of Files
 export const getFilesUnderPath = (params: {
     path: string;
@@ -23,9 +45,12 @@ export const getFilesUnderPath = (params: {
             for (let child of folderObj.children) {
                 if (child instanceof TFile) {
                     if (
-                        excludedExtensions.includes(child.extension) ||
-                        (plugin.settings.hideAttachments && child.path.toLowerCase().includes(plugin.settings.attachmentsFolderName.toLowerCase())) ||
-                        excludedFolders.includes(child.parent.path)
+                        !isFileVisibleInList(child, {
+                            excludedExtensions,
+                            excludedFolders,
+                            hideAttachments: plugin.settings.hideAttachments,
+                            attachmentsFolderName: plugin.settings.attachmentsFolderName,
+                        })
                     )
                         continue;
                     filesUnderPath.push(TFile2OZFile(child));
@@ -86,7 +111,11 @@ export const createFolderTree = (params: { startFolder: TFolder; excludedFolders
 };
 
 // Create Folder File Count Map
-export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin) => {
+export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin, filters?: { excludedExtensions?: string[]; excludedFolders?: string[] }): FolderFileCountMap => {
+    // Fall back to the same store state the file listing uses, so badges match listings
+    const storeState = usePluginStore.getState();
+    const excludedExtensions = filters?.excludedExtensions ?? storeState.excludedExtensions ?? [];
+    const excludedFolders = filters?.excludedFolders ?? storeState.excludedFolders ?? [];
     const counts: FolderFileCountMap = {};
     let files: TFile[];
     if (plugin.settings.folderCountOption === 'notes') {
@@ -95,10 +124,16 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin) => {
         files = plugin.app.vault.getFiles();
     }
 
-    // Filter Folder Note Files
-    if (plugin.settings.folderNote) {
-        files = files.filter((f) => f.extension !== 'md' || (f.extension === 'md' && f.basename !== f.parent.name));
-    }
+    files = files.filter((f) =>
+        isFileVisibleInList(f, {
+            excludedExtensions,
+            excludedFolders,
+            hideAttachments: plugin.settings.hideAttachments,
+            attachmentsFolderName: plugin.settings.attachmentsFolderName,
+            folderCountOption: plugin.settings.folderCountOption,
+            excludeFolderNotes: plugin.settings.folderNote,
+        })
+    );
 
     files.forEach((file) => {
         for (let folder = file.parent; folder != null; folder = folder.parent) {
@@ -117,24 +152,11 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin) => {
  *  @param map - existing count map (will be mutated and returned)
  *  @param file - the file being created or deleted
  *  @param delta - +1 for create, -1 for delete
- *  @param folderNote - whether folder notes are being filtered (same as settings.folderNote)
- *  @param folderCountOption - 'notes' or 'files'
+ *  @param visibilityOptions - same visibility rules the listing uses (see isFileVisibleInList)
  */
-export const incrementFolderCountMap = (
-    map: FolderFileCountMap,
-    file: TFile,
-    delta: 1 | -1,
-    folderNote: boolean,
-    folderCountOption: string
-): FolderFileCountMap => {
-    // Skip folder note files if folderNote setting is on
-    if (folderNote && file.extension === 'md' && file.basename === file.parent.name) {
-        return map;
-    }
-    // Skip non-md files if folderCountOption is 'notes'
-    if (folderCountOption === 'notes' && file.extension !== 'md') {
-        return map;
-    }
+export const incrementFolderCountMap = (map: FolderFileCountMap, file: TFile, delta: 1 | -1, visibilityOptions: FileVisibilityOptions): FolderFileCountMap => {
+    // Skip files that are not visible in listings so badges stay in sync
+    if (!isFileVisibleInList(file, visibilityOptions)) return map;
 
     for (let folder = file.parent; folder != null; folder = folder.parent) {
         if (!map[folder.path]) map[folder.path] = { open: 0, closed: 0 };

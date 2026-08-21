@@ -77,7 +77,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     useEffect(() => {
         const unsubVaultChange = eventBus.on(eventTypes.vaultChange, vaultChangeEvent);
         const unsubActiveFile = eventBus.on(eventTypes.activeFileChange, changeActiveFile);
-        const unsubRefresh = eventBus.on(eventTypes.refreshView, forceUpdate);
+        const unsubRefresh = eventBus.on(eventTypes.refreshView, handleRefreshView);
         const unsubRevealFile = eventBus.on(eventTypes.revealFile, handleRevealFileEvent);
         const unsubRevealFolder = eventBus.on(eventTypes.revealFolder, handleRevealFolderEvent);
         const unsubCreateNote = eventBus.on(eventTypes.createNewNote, handleCreateNewNoteEvent);
@@ -94,6 +94,12 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const handleCreateNewNoteEvent = () => {
         let currentActiveFolderPath = usePluginStore.getState().activeFolderPath || '/';
         FileTreeUtils.createNewFile(null, currentActiveFolderPath, plugin);
+    };
+
+    // Rebuild folder counts on view refresh so badges stay in sync with filter settings
+    const handleRefreshView = () => {
+        if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+        forceUpdate();
     };
 
     const vaultChangeEvent = (detail: { file: TFile; changeType: VaultChange; oldPath: string }) => {
@@ -131,6 +137,11 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             localStorage.setItem(plugin.keys.focusedFolder, focusedFolder.path);
         }
     }, [focusedFolder, excludedFolders]);
+
+    // Rebuild folder count map when exclusion filters change so badges match listings
+    useEffect(() => {
+        if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+    }, [excludedExtensions, excludedFolders]);
 
     const setInitialFocusedFolder = () => {
         let localFocusedFolder = localStorage.getItem(plugin.keys.focusedFolder);
@@ -336,13 +347,21 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                 // Incremental: +1 for create, -1 for delete
                 const delta = changeType === 'create' ? 1 : -1;
                 const currentMap = usePluginStore.getState().folderFileCountMap;
+                // Use the same filters as the listing so badges match what clicking a folder shows
+                const storeState = usePluginStore.getState();
                 setFolderFileCountMap(
                     FileTreeUtils.incrementFolderCountMap(
                         { ...currentMap },
                         file,
                         delta,
-                        plugin.settings.folderNote,
-                        plugin.settings.folderCountOption
+                        {
+                            excludedExtensions: storeState.excludedExtensions ?? [],
+                            excludedFolders: storeState.excludedFolders ?? [],
+                            hideAttachments: plugin.settings.hideAttachments,
+                            attachmentsFolderName: plugin.settings.attachmentsFolderName,
+                            folderCountOption: plugin.settings.folderCountOption,
+                            excludeFolderNotes: plugin.settings.folderNote,
+                        }
                     )
                 );
             }
