@@ -40,6 +40,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const setFolderFileCountMap = usePluginStore((s) => s.setFolderFileCountMap);
     const excludedExtensions = usePluginStore((s) => s.excludedExtensions);
     const setExcludedExtensions = usePluginStore((s) => s.setExcludedExtensions);
+    const showSubFolders = usePluginStore((s) => s.showSubFolders);
     const setShowSubFolders = usePluginStore((s) => s.setShowSubFolders);
     const focusedFolder = usePluginStore((s) => s.focusedFolder);
     const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
