@@ -1,7 +1,7 @@
 {
     "id": "file-tree-alternative",
     "name": "File Tree Alternative",
-    "version": "2.6.0",
+    "version": "2.6.1",
     "minAppVersion": "1.7.2",
     "description": "Alternative file tree view (Pamela's fork) — adds native breadcrumb folder-click interception and inter-plugin API.",
     "author": "Pamela Wang (original by Ozan Tellioglu)",
