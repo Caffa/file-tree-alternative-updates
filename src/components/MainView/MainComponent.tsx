@@ -167,7 +167,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             setView('file');
         }
         localStorage.setItem(plugin.keys.activeFolderPathKey, activeFolderPath);
-    }, [activeFolderPath]);
+    }, [activeFolderPath, excludedExtensions, excludedFolders, showSubFolders]);
 
     // Load Excluded Extensions as State
     function getExcludedExtensions(): string[] {

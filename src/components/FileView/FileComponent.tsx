@@ -72,18 +72,6 @@ export function FileComponent(props: FilesProps) {
         [activeFolderPath, plugin.settings.overrideFolderClick]
     );
 
-    // File List Update once showSubFolders change
-    useEffect(() => {
-        setOzFileList(
-            Util.getFilesUnderPath({
-                path: activeFolderPath,
-                plugin: plugin,
-                excludedExtensions: excludedExtensions,
-                excludedFolders: excludedFolders,
-            })
-        );
-    }, [showSubFolders, excludedExtensions, excludedFolders]);
-
     // To focus on Search box if visible set
     useEffect(() => {
         if (searchBoxVisible) searchInput.current.focus();
