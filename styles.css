@@ -182,6 +182,12 @@ settings:
     --oz-fta-recent-trail-1-color: #e67e22;
     --oz-fta-recent-trail-2-color: #2ecc71;
     --oz-fta-recent-file-color: var(--interactive-accent);
+    --oz-fta-subfolder-color-0: #e74c3c;
+    --oz-fta-subfolder-color-1: #3498db;
+    --oz-fta-subfolder-color-2: #2ecc71;
+    --oz-fta-subfolder-color-3: #f39c12;
+    --oz-fta-subfolder-color-4: #9b59b6;
+    --oz-fta-subfolder-color-5: #1abc9c;
 }
 
 .oz-file-tree-header {
@@ -383,6 +389,25 @@ div.workspace-leaf-content[data-type='file-tree-view'] > div.view-content {
 .oz-nav-file {
     margin-left: 3px;
     padding-right: 3px;
+}
+
+.oz-nav-file-subfolder-chip {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-left: 4px;
+    flex-shrink: 0;
+    opacity: 0.85;
+    align-self: center;
+}
+
+.oz-nav-file.oz-nav-file-subfolder-tint .oz-nav-file-title {
+    background-color: color-mix(in srgb, var(--oz-fta-subfolder-tint) 18%, transparent);
+}
+
+div.oz-nav-file.oz-nav-file-subfolder-tint.is-active .oz-nav-file-title,
+div.oz-nav-file.oz-nav-file-subfolder-tint:hover .oz-nav-file-title {
+    background-color: color-mix(in srgb, var(--oz-fta-subfolder-tint) 28%, var(--background-secondary-alt));
 }
 
 .oz-folder-contents {

@@ -9,12 +9,14 @@ export type SortType = 'name' | 'last-update' | 'created' | 'file-size';
 export type FolderSortType = 'name' | 'item-number' | 'last-update';
 export type DeleteFileOption = 'trash' | 'permanent' | 'system-trash';
 export type EvernoteViewOption = 'Disabled' | 'Horizontal' | 'Vertical';
+export type SubfolderIndicatorStyle = 'off' | 'minimal' | 'with-indicators';
 
 export interface FileTreeAlternativePluginSettings {
     openViewOnStart: boolean;
     ribbonIcon: boolean;
     showRootFolder: boolean;
     showFilesFromSubFolders: boolean;
+    subfolderIndicatorStyle: SubfolderIndicatorStyle;
     searchFunction: boolean;
     allSearchOnlyInFocusedFolder: boolean;
     showFilesFromSubFoldersButton: boolean;
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: FileTreeAlternativePluginSettings = {
     ribbonIcon: true,
     showRootFolder: true,
     showFilesFromSubFolders: true,
+    subfolderIndicatorStyle: 'off',
     searchFunction: true,
     allSearchOnlyInFocusedFolder: false,
     showFilesFromSubFoldersButton: true,
@@ -390,6 +393,15 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
                         control: {
                             type: 'toggle' as const,
                             key: 'showFilesFromSubFolders' as const,
+                        },
+                    },
+                    {
+                        name: 'Subfolder Color Indicator',
+                        desc: 'When files from multiple subfolders are shown together under a parent folder, show a small color chip on each row, or tint the row background, or turn indicators off. Only applies to files from subfolders; files directly in the active folder get no indicator.',
+                        control: {
+                            type: 'dropdown' as const,
+                            key: 'subfolderIndicatorStyle' as const,
+                            options: { off: 'Off', minimal: 'Minimal', 'with-indicators': 'With indicators' },
                         },
                     },
                     {

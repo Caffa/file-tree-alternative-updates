@@ -37,6 +37,11 @@ interface FilesProps {
     plugin: FileTreeAlternativePlugin;
 }
 
+interface SubfolderIndicatorInfo {
+    visible: boolean;
+    colorIndexByPath?: Map<string, number>;
+}
+
 export function FileComponent(props: FilesProps) {
     let searchInput = React.useRef<HTMLInputElement>(null);
     const plugin = props.plugin;
@@ -147,6 +152,25 @@ export function FileComponent(props: FilesProps) {
         }
         return ranks;
     }, [ozFileList, plugin.settings.highlightRecentFiles, plugin.settings.recentFilesCount]);
+
+    // Compute subfolder indicator map for files shown from subfolders.
+    // Only visible when style is not 'off' and files from ≥2 distinct subfolders are displayed.
+    const subfolderIndicatorInfo = useMemo(() => {
+        if (plugin.settings.subfolderIndicatorStyle === 'off') return { visible: false } as SubfolderIndicatorInfo;
+        const subfolders = new Set<string>();
+        for (const file of filesToList) {
+            if (file.parent.path !== activeFolderPath) {
+                subfolders.add(file.parent.path);
+            }
+        }
+        if (subfolders.size < 2) return { visible: false } as SubfolderIndicatorInfo;
+        const sorted = Array.from(subfolders).sort();
+        const colorIndexByPath = new Map<string, number>();
+        sorted.forEach((path, index) => {
+            colorIndexByPath.set(path, index % 6);
+        });
+        return { visible: true, colorIndexByPath } as SubfolderIndicatorInfo;
+    }, [filesToList, activeFolderPath, plugin.settings.subfolderIndicatorStyle]);
 
     // Go Back Button - Sets Main Component View to Folder
     const handleGoBack = (e: React.MouseEvent) => {
@@ -358,7 +382,13 @@ export function FileComponent(props: FilesProps) {
                         {filesToList.map((file, index) => {
                             return (
                                 <LazyLoad height={22} key={index}>
-                                    <NavFile file={file} plugin={plugin} recentRank={recentFileRanks.get(file.path)} />
+                                    <NavFile
+                                        file={file}
+                                        plugin={plugin}
+                                        recentRank={recentFileRanks.get(file.path)}
+                                        subfolderIndicatorInfo={subfolderIndicatorInfo}
+                                        activeFolderPath={activeFolderPath}
+                                    />
                                 </LazyLoad>
                             );
                         })}
@@ -372,8 +402,14 @@ export function FileComponent(props: FilesProps) {
 
 /* ----------- SINGLE NAVFILE ELEMENT ----------- */
 
-const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin; recentRank?: number }) => {
-    const { file, plugin, recentRank } = props;
+const NavFile = (props: {
+    file: OZFile;
+    plugin: FileTreeAlternativePlugin;
+    recentRank?: number;
+    subfolderIndicatorInfo: SubfolderIndicatorInfo;
+    activeFolderPath: string;
+}) => {
+    const { file, plugin, recentRank, subfolderIndicatorInfo, activeFolderPath } = props;
 
     const ozPinnedFiles = usePluginStore((s) => s.ozPinnedFileList);
     const setOzPinnedFiles = usePluginStore((s) => s.setOzPinnedFileList);
@@ -427,9 +463,28 @@ const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin; recen
         return '';
     }, [recentRank, plugin.settings.recentFilesCount]);
 
+    const subfolderIndex = useMemo(() => {
+        if (!subfolderIndicatorInfo.visible) return undefined;
+        if (file.parent.path === activeFolderPath) return undefined;
+        return subfolderIndicatorInfo.colorIndexByPath?.get(file.parent.path);
+    }, [subfolderIndicatorInfo, file.parent.path, activeFolderPath]);
+
+    const tintStyle = useMemo(() => {
+        if (subfolderIndex === undefined || plugin.settings.subfolderIndicatorStyle !== 'with-indicators') return undefined;
+        return { '--oz-fta-subfolder-tint': `var(--oz-fta-subfolder-color-${subfolderIndex})` } as React.CSSProperties;
+    }, [subfolderIndex, plugin.settings.subfolderIndicatorStyle]);
+
     return (
         <div
-            className={'oz-nav-file' + (activeOzFile && activeOzFile.path === file.path ? ' is-active' : '') + recentFileClass}
+            className={
+                'oz-nav-file' +
+                (activeOzFile && activeOzFile.path === file.path ? ' is-active' : '') +
+                recentFileClass +
+                (subfolderIndex !== undefined && plugin.settings.subfolderIndicatorStyle === 'with-indicators'
+                    ? ' oz-nav-file-subfolder-tint'
+                    : '')
+            }
+            style={tintStyle}
             key={file.path}
             draggable
             onDragStart={(e) =>
@@ -474,6 +529,12 @@ const NavFile = (props: { file: OZFile; plugin: FileTreeAlternativePlugin; recen
                 </div>
                 {ozPinnedFiles.some((f) => f.path === file.path) && <Icons.FaThumbtack className="oz-nav-file-tag" size={14} />}
                 {file.extension !== 'md' && <span className="oz-nav-file-tag">{file.extension}</span>}
+                {subfolderIndex !== undefined && plugin.settings.subfolderIndicatorStyle === 'minimal' && (
+                    <span
+                        className="oz-nav-file-subfolder-chip"
+                        style={{ backgroundColor: `var(--oz-fta-subfolder-color-${subfolderIndex})` }}
+                    />
+                )}
             </div>
         </div>
     );
