@@ -401,14 +401,31 @@ div.workspace-leaf-content[data-type='file-tree-view'] > div.view-content {
     align-self: center;
 }
 
-.oz-nav-file.oz-nav-file-subfolder-tint .oz-nav-file-title {
+.oz-nav-file.oz-nav-file-subfolder-tint {
     background-color: color-mix(in srgb, var(--oz-fta-subfolder-tint) 18%, transparent);
 }
 
-div.oz-nav-file.oz-nav-file-subfolder-tint.is-active .oz-nav-file-title,
-div.oz-nav-file.oz-nav-file-subfolder-tint:hover .oz-nav-file-title {
+div.oz-nav-file.oz-nav-file-subfolder-tint.is-active,
+div.oz-nav-file.oz-nav-file-subfolder-tint:hover {
     background-color: color-mix(in srgb, var(--oz-fta-subfolder-tint) 28%, var(--background-secondary-alt));
 }
+
+/* Keep the recent-file highlight visible when a row also has a subfolder tint.
+   Recent-file rules appear later in the stylesheet, but these explicit combos
+   guarantee the recent-file glow isn't overridden by the tint. */
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-0,
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-1,
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-2,
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-3,
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-4 {
+    background-color: color-mix(in srgb, var(--oz-fta-recent-file-color, var(--interactive-accent)) var(--oz-recent-file-opacity, 25%), transparent);
+}
+
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-0 { --oz-recent-file-opacity: 25%; }
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-1 { --oz-recent-file-opacity: 15%; }
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-2 { --oz-recent-file-opacity: 8%; }
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-3 { --oz-recent-file-opacity: 4%; }
+.oz-nav-file.oz-nav-file-subfolder-tint.oz-recent-file-4 { --oz-recent-file-opacity: 2%; }
 
 .oz-folder-contents {
     will-change: transform, opacity, height;
