@@ -456,12 +456,16 @@ const NavFile = (props: {
         return plugin.settings.showFileNameAsFullPath ? Util.getFileNameAndExtension(file.path).fileName : file.basename;
     }, [plugin.settings.showFileNameAsFullPath, file.path]);
 
+    const useStarForRecent = useMemo(() => {
+        return plugin.settings.subfolderIndicatorStyle === 'with-indicators' && recentRank !== undefined && recentRank < plugin.settings.recentFilesCount;
+    }, [recentRank, plugin.settings.recentFilesCount, plugin.settings.subfolderIndicatorStyle]);
+
     const recentFileClass = useMemo(() => {
-        if (recentRank !== undefined && recentRank < plugin.settings.recentFilesCount) {
-            return ` oz-recent-file-${recentRank}`;
-        }
-        return '';
-    }, [recentRank, plugin.settings.recentFilesCount]);
+        if (recentRank === undefined || recentRank >= plugin.settings.recentFilesCount) return '';
+        // When subfolder background tint is active, show a star instead of a row background.
+        if (useStarForRecent) return ` oz-recent-file-star oz-recent-file-star-${recentRank}`;
+        return ` oz-recent-file-${recentRank}`;
+    }, [recentRank, plugin.settings.recentFilesCount, useStarForRecent]);
 
     const subfolderIndex = useMemo(() => {
         if (!subfolderIndicatorInfo.visible) return undefined;
@@ -526,6 +530,7 @@ const NavFile = (props: {
                 <div className="oz-nav-file-title-content">
                     {plugin.settings.iconBeforeFileName && <FileIcon className="oz-nav-file-icon" size={15} />}
                     {fileDisplayName}
+                    {useStarForRecent && <Icons.FaStar className="oz-recent-file-star-icon" size={12} />}
                 </div>
                 {ozPinnedFiles.some((f) => f.path === file.path) && <Icons.FaThumbtack className="oz-nav-file-tag" size={14} />}
                 {file.extension !== 'md' && <span className="oz-nav-file-tag">{file.extension}</span>}

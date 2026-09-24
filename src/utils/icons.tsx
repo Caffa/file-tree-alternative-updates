@@ -4,7 +4,7 @@ import { BiFolderPlus, BiFolder, BiFolderMinus, BiFile, BiCurrentLocation } from
 import { ImFolder, ImFolderPlus, ImFolderMinus } from 'react-icons/im';
 import { TiFolder, TiFolderOpen } from 'react-icons/ti';
 import { CgCloseO, CgAdd, CgRemove } from 'react-icons/cg';
-import { FaTimesCircle, FaThumbtack, FaArrowCircleLeft } from 'react-icons/fa';
+import { FaTimesCircle, FaThumbtack, FaArrowCircleLeft, FaStar } from 'react-icons/fa';
 import { AiFillFilePdf, AiFillFileImage, AiFillFileWord } from 'react-icons/ai';
 import { IoIosSearch, IoIosEye, IoIosEyeOff, IoIosAddCircle, IoIosCloseCircleOutline, IoIosArrowBack, IoMdArrowDropright } from 'react-icons/io';
 import { MdOutlineCreateNewFolder } from 'react-icons/md';
@@ -95,6 +95,7 @@ export {
     FaArrowCircleLeft,
     FaThumbtack,
     FaTimesCircle,
+    FaStar,
     LocationIcon,
     ZoomOutIcon,
     ZoomInIcon,

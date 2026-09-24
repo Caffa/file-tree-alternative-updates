@@ -719,6 +719,42 @@ svg.oz-folder-toggle path {
     border-radius: 3px;
 }
 
+/* Star indicator shown when subfolder background tint is active (with-indicators mode).
+   The star sits next to the file name and its brightness decreases with recency rank. */
+.oz-recent-file-star-icon {
+    color: var(--oz-fta-recent-file-color, var(--interactive-accent));
+    margin-left: 4px;
+    flex-shrink: 0;
+    align-self: center;
+    vertical-align: middle;
+}
+
+.oz-nav-file.oz-recent-file-star-0 .oz-recent-file-star-icon {
+    opacity: 1;
+}
+
+.oz-nav-file.oz-recent-file-star-1 .oz-recent-file-star-icon {
+    opacity: 0.75;
+}
+
+.oz-nav-file.oz-recent-file-star-2 .oz-recent-file-star-icon {
+    opacity: 0.55;
+}
+
+.oz-nav-file.oz-recent-file-star-3 .oz-recent-file-star-icon {
+    opacity: 0.35;
+}
+
+.oz-nav-file.oz-recent-file-star-4 .oz-recent-file-star-icon {
+    opacity: 0.2;
+}
+
+/* Keep the star tinted and visible during hover/active states so it isn't washed out. */
+div.oz-nav-file.oz-recent-file-star.is-active .oz-recent-file-star-icon,
+div.oz-nav-file.oz-recent-file-star:hover .oz-recent-file-star-icon {
+    color: var(--oz-fta-recent-file-color, var(--interactive-accent));
+}
+
 /* Solution for React-Icon Center Issue */
 .oz-folder-name svg {
     vertical-align: middle !important;
