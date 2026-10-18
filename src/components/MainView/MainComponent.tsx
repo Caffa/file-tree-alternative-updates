@@ -17,6 +17,18 @@ interface MainTreeComponentProps {
     plugin: FileTreeAlternativePlugin;
 }
 
+// True when a folder event could change the tree rendered under the focused folder:
+// the event folder is the focused folder itself, inside it, or one of its ancestors.
+// Any other folder event cannot alter the visible tree, so the rebuild is skipped.
+const folderEventAffectsFocusedFolder = (eventPath: string, focusedFolder: TFolder | null): boolean => {
+    if (!focusedFolder) return false;
+    const focusedPath = focusedFolder.path;
+    if (focusedPath === '/' || focusedPath === '') return true; // whole vault visible
+    if (eventPath === focusedPath) return true;
+    if (eventPath.startsWith(focusedPath + '/')) return true; // inside focused folder
+    return focusedPath.startsWith(eventPath + '/'); // ancestor of focused folder
+};
+
 export default function MainTreeComponent(props: MainTreeComponentProps) {
     // --> Main Variables
     const { plugin } = props;
@@ -145,6 +157,29 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     );
     // Cancel pending patch on unmount — the list is rebuilt from scratch on mount anyway
     useEffect(() => () => flushModifiedFiles.cancel(), [flushModifiedFiles]);
+
+    // --> Debounced folder-tree rebuild for TFolder events.
+    // Gated by folderEventAffectsFocusedFolder (nothing visible → no rebuild at all) and
+    // then coalesced: mass folder operations fire one event per folder and each used to
+    // trigger a synchronous full createFolderTree walk. Active-folder-path rename fixup
+    // below stays synchronous.
+    const debouncedFolderTreeRebuild = useMemo(
+        () =>
+            FileTreeUtils.debounce(() => {
+                const focusedFolder = usePluginStore.getState().focusedFolder;
+                if (!focusedFolder) return;
+                setFolderTree(
+                    FileTreeUtils.createFolderTree({
+                        startFolder: focusedFolder,
+                        plugin: plugin,
+                        excludedFolders: usePluginStore.getState().excludedFolders,
+                    })
+                );
+            }, 500),
+        [plugin, setFolderTree]
+    );
+    // Cancel pending rebuild on unmount
+    useEffect(() => () => debouncedFolderTreeRebuild.cancel(), [debouncedFolderTreeRebuild]);
 
     const changeActiveFile = (detail: { filePath: string }) => {
         let filePath: string = detail.filePath;
@@ -373,7 +408,11 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         // Folder Event Handlers
         else if (file instanceof TFolder) {
             let currentFocusedFolder: TFolder | null = usePluginStore.getState().focusedFolder;
-            setFolderTree(FileTreeUtils.createFolderTree({ startFolder: currentFocusedFolder, plugin: plugin, excludedFolders: excludedFolders }));
+            // Rebuild only when the event folder is visible from the focused folder;
+            // visible-affecting events are debounced so bursts coalesce into one walk
+            if (folderEventAffectsFocusedFolder(file.path, currentFocusedFolder)) {
+                debouncedFolderTreeRebuild();
+            }
             // if active folder is renamed, activefolderpath needs to be refreshed
             if (changeType === 'rename' && oldPathBeforeRename && currentActiveFolderPath === oldPathBeforeRename) {
                 setActiveFolderPath(file.path);
