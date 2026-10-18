@@ -518,6 +518,52 @@ export const createNewFile = async (e: React.MouseEvent | null, folderPath: stri
 // Global 'app' is provided by Obsidian at runtime (not imported)
 declare const app: App;
 
+/**
+ * Vault-scoped persistence (Obsidian ≥ 1.8.7): prefers the app-level
+ * saveLocalStorage/loadLocalStorage pair, which Obsidian namespaces by vault,
+ * falling back to plain localStorage when the API is unavailable. Key strings
+ * and JSON payload formats stay EXACTLY the same — only the backing store
+ * changes, so mixed states can never occur (Obsidian namespaces the keys by
+ * vault internally; no prefix is added here).
+ */
+export const saveScoped = (key: string, value: string): void => {
+    try {
+        if (typeof app.saveLocalStorage === 'function') {
+            app.saveLocalStorage(key, value);
+        } else {
+            localStorage.setItem(key, value);
+        }
+    } catch (e) {
+        console.log('File Tree Alternative: Failed to save scoped storage for', key, e);
+    }
+};
+
+export const loadScoped = (key: string): string | null => {
+    try {
+        if (typeof app.loadLocalStorage === 'function') {
+            const value = app.loadLocalStorage(key);
+            return value === null || value === undefined ? null : String(value);
+        }
+        return localStorage.getItem(key);
+    } catch (e) {
+        console.log('File Tree Alternative: Failed to load scoped storage for', key, e);
+        return null;
+    }
+};
+
+/** Removes a vault-scoped key (per the Obsidian API, saveLocalStorage(key, null) clears the entry). */
+export const removeScoped = (key: string): void => {
+    try {
+        if (typeof app.saveLocalStorage === 'function') {
+            app.saveLocalStorage(key, null);
+        } else {
+            localStorage.removeItem(key);
+        }
+    } catch (e) {
+        console.log('File Tree Alternative: Failed to remove scoped storage for', key, e);
+    }
+};
+
 export const getBookmarksPluginItems = (): BookmarksPluginItem[] => {
     return (app as any).internalPlugins.plugins['bookmarks'].instance.items as BookmarksPluginItem[];
 };

@@ -4,7 +4,7 @@ import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } f
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING } from 'utils/Utils';
+import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING, loadScoped, saveScoped, removeScoped } from 'utils/Utils';
 import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -429,7 +429,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
             return;
         }
         try {
-            const cached = localStorage.getItem(this.keys.recentFoldersCacheKey);
+            const cached = loadScoped(this.keys.recentFoldersCacheKey);
             if (cached) {
                 const folderMtimes = new Map<string, number>(JSON.parse(cached));
                 // Prune stale entries (folders that no longer exist)
@@ -486,7 +486,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
             clearTimeout(this.recentFoldersPersistTimer);
             this.recentFoldersPersistTimer = null;
         }
-        localStorage.removeItem(this.keys.recentFoldersCacheKey);
+        removeScoped(this.keys.recentFoldersCacheKey);
     };
 
     /**
@@ -569,7 +569,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
         try {
             // Read the freshest map from the store so overlapping updates collapse into one write
             const folderMtimes = usePluginStore.getState().recentFolderMtimes;
-            localStorage.setItem(this.keys.recentFoldersCacheKey, JSON.stringify(Array.from(folderMtimes.entries())));
+            saveScoped(this.keys.recentFoldersCacheKey, JSON.stringify(Array.from(folderMtimes.entries())));
         } catch (e) {
             console.warn('File Tree Alternative: Failed to persist recent folders cache', e);
         }

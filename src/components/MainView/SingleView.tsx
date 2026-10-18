@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import FileTreeAlternativePlugin from 'main';
 import { MainFolder } from 'components/FolderView/MainFolder';
 import { FileComponent } from 'components/FileView/FileComponent';
+import { loadScoped, saveScoped } from 'utils/Utils';
 
 export const SingleViewVertical = (props: { plugin: FileTreeAlternativePlugin }) => {
     let { plugin } = props;
@@ -13,11 +14,11 @@ export const SingleViewVertical = (props: { plugin: FileTreeAlternativePlugin })
     let folderPaneRef = useRef<HTMLDivElement>();
     let dividerRef = useRef<HTMLDivElement>();
 
-    let heightSetting = localStorage.getItem(plugin.keys.customHeightKey);
+    let heightSetting = loadScoped(plugin.keys.customHeightKey);
 
-    // Save final divider position only on mouseup (avoid per-pixel localStorage writes)
+    // Save final divider position only on mouseup (avoid per-pixel storage writes)
     const saveDividerPosition = (height: number) => {
-        localStorage.setItem(plugin.keys.customHeightKey, height.toString());
+        saveScoped(plugin.keys.customHeightKey, height.toString());
     };
 
     function touchMouseStart(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
@@ -80,11 +81,11 @@ export const SingleViewHorizontal = (props: { plugin: FileTreeAlternativePlugin 
     let folderPaneRef = useRef<HTMLDivElement>();
     let dividerRef = useRef<HTMLDivElement>();
 
-    let widthSetting = localStorage.getItem(plugin.keys.customWidthKey);
+    let widthSetting = loadScoped(plugin.keys.customWidthKey);
 
-    // Save final divider position only on mouseup (avoid per-pixel localStorage writes)
+    // Save final divider position only on mouseup (avoid per-pixel storage writes)
     const saveDividerPosition = (width: number) => {
-        localStorage.setItem(plugin.keys.customWidthKey, width.toString());
+        saveScoped(plugin.keys.customWidthKey, width.toString());
     };
 
     function touchMouseStart(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {

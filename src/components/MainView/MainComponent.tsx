@@ -78,7 +78,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
     const setInitialActiveFolderPath = () => {
         if (['Horizontal', 'Vertical'].includes(plugin.settings.evernoteView)) {
-            let previousActiveFolder = localStorage.getItem(plugin.keys.activeFolderPathKey);
+            let previousActiveFolder = FileTreeUtils.loadScoped(plugin.keys.activeFolderPathKey);
             if (previousActiveFolder) {
                 const folder = plugin.app.vault.getFolderByPath(previousActiveFolder);
                 if (folder) {
@@ -251,7 +251,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                     excludedFolders: excludedFolders,
                 })
             );
-            localStorage.setItem(plugin.keys.focusedFolder, focusedFolder.path);
+            FileTreeUtils.saveScoped(plugin.keys.focusedFolder, focusedFolder.path);
         }
     }, [focusedFolder, excludedFolders]);
 
@@ -269,7 +269,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     }, [excludedExtensions, excludedFolders]);
 
     const setInitialFocusedFolder = () => {
-        let localFocusedFolder = localStorage.getItem(plugin.keys.focusedFolder);
+        let localFocusedFolder = FileTreeUtils.loadScoped(plugin.keys.focusedFolder);
         if (localFocusedFolder) {
             const folder = plugin.app.vault.getFolderByPath(localFocusedFolder);
             if (folder) {
@@ -291,7 +291,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             setNewFileList(activeFolderPath);
             setView('file');
         }
-        localStorage.setItem(plugin.keys.activeFolderPathKey, activeFolderPath);
+        FileTreeUtils.saveScoped(plugin.keys.activeFolderPathKey, activeFolderPath);
     }, [activeFolderPath, excludedExtensions, excludedFolders, showSubFolders]);
 
     // Load Excluded Extensions as State
@@ -319,7 +319,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // Load The String List and Set Open Folders State
     function getOpenFoldersFromSettings(): string[] {
         let openFolders: string[] = [];
-        let localStorageOpenFolders = localStorage.getItem(plugin.keys.openFoldersKey);
+        let localStorageOpenFolders = FileTreeUtils.loadScoped(plugin.keys.openFoldersKey);
         if (localStorageOpenFolders) {
             localStorageOpenFolders = JSON.parse(localStorageOpenFolders);
             for (let folder of localStorageOpenFolders) {
@@ -333,7 +333,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // Load The String List anad Set Pinned Files State
     function getPinnedFilesFromSettings(): OZFile[] {
         let pinnedFiles: OZFile[] = [];
-        let localStoragePinnedFiles = localStorage.getItem(plugin.keys.pinnedFilesKey);
+        let localStoragePinnedFiles = FileTreeUtils.loadScoped(plugin.keys.pinnedFilesKey);
         if (localStoragePinnedFiles) {
             localStoragePinnedFiles = JSON.parse(localStoragePinnedFiles);
             for (let file of localStoragePinnedFiles) {
@@ -350,7 +350,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         for (let folder of openFolders) {
             openFoldersToSave.push(folder);
         }
-        localStorage.setItem(plugin.keys.openFoldersKey, JSON.stringify(openFoldersToSave));
+        FileTreeUtils.saveScoped(plugin.keys.openFoldersKey, JSON.stringify(openFoldersToSave));
     }
 
     // Get The Pinned Files State and Save in Data as String Array
@@ -359,7 +359,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         for (let file of ozPinnedFiles) {
             pinnedFilesToSave.push(file.path);
         }
-        localStorage.setItem(plugin.keys.pinnedFilesKey, JSON.stringify(pinnedFilesToSave));
+        FileTreeUtils.saveScoped(plugin.keys.pinnedFilesKey, JSON.stringify(pinnedFilesToSave));
     }
 
     // Save Excluded Folders to Settings as String
