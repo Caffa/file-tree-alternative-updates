@@ -168,6 +168,47 @@ export const incrementFolderCountMap = (map: FolderFileCountMap, file: TFile, de
     return map;
 };
 
+/** Folder rename: move the folder's count key (and every subfolder key) to the new path
+ *  prefix, preserving values. Returns a NEW map when keys were remapped, the SAME map
+ *  when nothing matched (self-rename no-op), or null on anomaly (rename into own
+ *  subpath, or a target key already exists — e.g. a stale entry). Callers must fall
+ *  back to a full getFolderNoteCountMap rebuild on null instead of shipping a corrupt
+ *  badge map. */
+export const remapFolderCountKeys = (map: FolderFileCountMap, oldPath: string, newPath: string): FolderFileCountMap | null => {
+    if (oldPath === newPath) return map;
+    // Renaming a folder into its own subtree needs chained prefix rewrites — rebuild instead
+    if (newPath.startsWith(oldPath + '/')) return null;
+    const prefix = oldPath + '/';
+    const next: FolderFileCountMap = {};
+    let changed = false;
+    for (const [key, value] of Object.entries(map)) {
+        const target = key === oldPath || key.startsWith(prefix) ? newPath + key.slice(oldPath.length) : key;
+        // Collision with an already-placed key (possible via stale entries) — rebuild instead
+        if (target in next) return null;
+        if (target !== key) changed = true;
+        next[target] = value;
+    }
+    return changed ? next : map;
+};
+
+/** Folder create/delete: apply a +1/-1 count delta for every visible file in the
+ *  folder's captured subtree (same visibility rules as the listing). Callers pass a
+ *  map they own — entries are mutated in place. */
+export const applySubtreeCountDelta = (map: FolderFileCountMap, folder: TFolder, delta: 1 | -1, visibilityOptions: FileVisibilityOptions): FolderFileCountMap => {
+    const walk = (folder: TFolder) => {
+        if (!folder.children) return;
+        for (const child of folder.children) {
+            if (child instanceof TFile) {
+                incrementFolderCountMap(map, child, delta, visibilityOptions);
+            } else if (child instanceof TFolder) {
+                walk(child);
+            }
+        }
+    };
+    walk(folder);
+    return map;
+};
+
 // Check if folder has child folder
 export const hasChildFolder = (folder: TFolder): boolean => {
     let children = folder.children;

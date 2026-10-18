@@ -382,30 +382,65 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
         // Update folder counts incrementally (avoids O(n) full rebuild on every event)
         if (plugin.settings.folderCount && changeType !== 'modify') {
-            if (changeType === 'rename' || file instanceof TFolder) {
-                // Full rebuild for renames (file path changes) and folder events
-                setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
-            } else if (file instanceof TFile) {
-                // Incremental: +1 for create, -1 for delete
-                const delta = changeType === 'create' ? 1 : -1;
-                const currentMap = usePluginStore.getState().folderFileCountMap;
-                // Use the same filters as the listing so badges match what clicking a folder shows
-                const storeState = usePluginStore.getState();
-                setFolderFileCountMap(
-                    FileTreeUtils.incrementFolderCountMap(
-                        { ...currentMap },
-                        file,
-                        delta,
-                        {
-                            excludedExtensions: storeState.excludedExtensions ?? [],
-                            excludedFolders: storeState.excludedFolders ?? [],
-                            hideAttachments: plugin.settings.hideAttachments,
-                            attachmentsFolderName: plugin.settings.attachmentsFolderName,
-                            folderCountOption: plugin.settings.folderCountOption,
-                            excludeFolderNotes: plugin.settings.folderNote,
-                        }
-                    )
-                );
+            const storeState = usePluginStore.getState();
+            const currentMap = storeState.folderFileCountMap;
+            // Use the same filters as the listing so badges match what clicking a folder shows
+            const visibilityOptions = {
+                excludedExtensions: storeState.excludedExtensions ?? [],
+                excludedFolders: storeState.excludedFolders ?? [],
+                hideAttachments: plugin.settings.hideAttachments,
+                attachmentsFolderName: plugin.settings.attachmentsFolderName,
+                folderCountOption: plugin.settings.folderCountOption,
+                excludeFolderNotes: plugin.settings.folderNote,
+            };
+            // Never ship a corrupt badge map: any anomaly falls back to a full rebuild
+            const fullRebuild = () => setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+
+            if (file instanceof TFolder) {
+                if (changeType === 'rename' && oldPathBeforeRename) {
+                    // Remap the old folder's keys (and its subfolders') to the new prefix
+                    const remapped = FileTreeUtils.remapFolderCountKeys(currentMap, oldPathBeforeRename, file.path);
+                    setFolderFileCountMap(remapped ?? FileTreeUtils.getFolderNoteCountMap(plugin));
+                } else if ((changeType === 'create' || changeType === 'delete') && file.children) {
+                    // Children still enumerable on the event object: walk the captured
+                    // subtree once; per-file increments match the create/delete rules
+                    setFolderFileCountMap(
+                        FileTreeUtils.applySubtreeCountDelta({ ...currentMap }, file, changeType === 'create' ? 1 : -1, visibilityOptions)
+                    );
+                } else {
+                    // Deleted folder whose children are gone, or unexpected combination
+                    fullRebuild();
+                }
+            } else if (file instanceof TFile && changeType === 'create') {
+                // Incremental: +1 for create
+                setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, 1, visibilityOptions));
+            } else if (file instanceof TFile && changeType === 'delete') {
+                // Incremental: -1 for delete
+                setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, -1, visibilityOptions));
+            } else if (file instanceof TFile && changeType === 'rename' && oldPathBeforeRename) {
+                const oldParentPath = oldPathBeforeRename.substring(0, oldPathBeforeRename.lastIndexOf('/')) || '/';
+                const newParentPath = file.parent ? file.parent.path : '/';
+                const oldBasename = oldPathBeforeRename.slice(oldPathBeforeRename.lastIndexOf('/') + 1);
+                const newBasename = file.path.slice(file.path.lastIndexOf('/') + 1);
+                if (oldParentPath === newParentPath && oldBasename === newBasename) {
+                    // Same parent, same name — counts unchanged
+                } else if (oldParentPath !== newParentPath && oldBasename === newBasename) {
+                    // Pure folder move: −1 along the old parent chain, +1 along the new one.
+                    // Keeping the basename means visibility is identical for both passes.
+                    const oldParent = plugin.app.vault.getFolderByPath(oldParentPath);
+                    if (!oldParent) {
+                        fullRebuild();
+                    } else {
+                        const decremented = FileTreeUtils.incrementFolderCountMap({ ...currentMap }, { ...file, parent: oldParent }, -1, visibilityOptions);
+                        setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap(decremented, file, 1, visibilityOptions));
+                    }
+                } else {
+                    // Name changed together with location (or in place): folder-note /
+                    // attachments-name visibility may flip — rebuild to stay exact
+                    fullRebuild();
+                }
+            } else {
+                fullRebuild();
             }
         }
     }
