@@ -63,7 +63,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 this.app.workspace.off('layout-change', resetGuard);
             };
             setTimeout(() => {
-                this.app.workspace.on('layout-change', resetGuard);
+                // registerEvent so the listener is auto-cleaned on unload instead of leaking
+                this.registerEvent(this.app.workspace.on('layout-change', resetGuard));
                 // Also schedule a fallback in case no layout-change fires
                 setTimeout(() => { this.viewOpenedOnStart = false; }, 2000);
             }, 500);
@@ -159,6 +160,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.breadcrumbRemoveEventListener();
         delete (window as any)['file-tree-alternative'];
         if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
+        // Flush pending recent-folder cache before the timeouts/localStorage go away
+        if (this.recentFoldersPersistTimer) {
+            clearTimeout(this.recentFoldersPersistTimer);
+            this.recentFoldersPersistTimer = null;
+        }
+        this.flushRecentFoldersCache();
     }
 
     async loadSettings() {
@@ -473,6 +480,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
             recentFolderMtimes: new Map(),
             recentFolderTrailIndex: new Map(),
         });
+        // Drop any pending persist so the timer cannot resurrect an empty cache after removal
+        this.recentFoldersPersistDirty = false;
+        if (this.recentFoldersPersistTimer) {
+            clearTimeout(this.recentFoldersPersistTimer);
+            this.recentFoldersPersistTimer = null;
+        }
         localStorage.removeItem(this.keys.recentFoldersCacheKey);
     };
 
@@ -521,7 +534,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
     /**
      * Derive display maps from the folderMtimes, batch-update the Zustand store
-     * in a single call, and persist to localStorage.
+     * in a single call. Persistence is deferred: the store update happens per flush,
+     * but the localStorage write only happens after 5 quiet seconds (or on unload).
      */
     private finalizeRecentFolderUpdate = (folderMtimes: Map<string, number>) => {
         const { recentFolders, folderDepth, folderTrailIndex } = deriveRecentFolders(folderMtimes, this.app, this.settings.recentFoldersCount);
@@ -532,7 +546,29 @@ export default class FileTreeAlternativePlugin extends Plugin {
             recentFolderMtimes: folderMtimes,
         });
 
+        this.scheduleRecentFoldersPersist();
+    };
+
+    /** Dirty flag + trailing timer so recent-folder caching never blocks the 200ms flush path. */
+    private recentFoldersPersistDirty = false;
+    private recentFoldersPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+    private scheduleRecentFoldersPersist = () => {
+        this.recentFoldersPersistDirty = true;
+        if (this.recentFoldersPersistTimer) clearTimeout(this.recentFoldersPersistTimer);
+        this.recentFoldersPersistTimer = setTimeout(() => {
+            this.recentFoldersPersistTimer = null;
+            this.flushRecentFoldersCache();
+        }, 5000);
+    };
+
+    /** Write the serialized map to localStorage only if it changed since the last write. */
+    private flushRecentFoldersCache = () => {
+        if (!this.recentFoldersPersistDirty) return;
+        this.recentFoldersPersistDirty = false;
         try {
+            // Read the freshest map from the store so overlapping updates collapse into one write
+            const folderMtimes = usePluginStore.getState().recentFolderMtimes;
             localStorage.setItem(this.keys.recentFoldersCacheKey, JSON.stringify(Array.from(folderMtimes.entries())));
         } catch (e) {
             console.warn('File Tree Alternative: Failed to persist recent folders cache', e);

@@ -40,7 +40,9 @@ export function NestedFolders(props: NestedFoldersProps) {
     const recentFolderMtimes = usePluginStore((s) => s.recentFolderMtimes);
 
     const getSortedFolderTree = (folderTree: FolderTree[]) => {
-        let newTree: FolderTree[] = folderTree;
+        // Sort a copy — the input array belongs to the folder tree object and must never
+        // be re-sorted in place (Array.sort mutates, which would corrupt the stored tree)
+        let newTree: FolderTree[] = [...folderTree];
         newTree = newTree.sort((a, b) => {
             if (plugin.settings.sortFoldersBy === 'name') {
                 return a.folder.name.localeCompare(b.folder.name, 'en', { numeric: true });

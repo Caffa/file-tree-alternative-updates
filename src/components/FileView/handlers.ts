@@ -110,16 +110,21 @@ export const handleRevealActiveFileButton = (params: { plugin: FileTreeAlternati
 // Sort - Filter Files Depending on Preferences
 export const sortedFiles = (params: { fileList: OZFile[]; plugin: FileTreeAlternativePlugin; ozPinnedFiles: OZFile[] }) => {
     let { fileList, plugin, ozPinnedFiles } = params;
-    let sortedfileList: OZFile[] = fileList;
+    // Always copy the zustand array before sorting/filtering so we never mutate store state in place
+    let sortedfileList: OZFile[] = [...fileList];
     // Remove Files for Folder Note (If file name is same as parent folder name)
     if (plugin.settings.folderNote) {
         sortedfileList = sortedfileList.filter((f) => !f.isFolderNote);
     }
+    // Hoist pinned-path lookup out of the comparator: O(n) Set.has() instead of O(n) Array.some() per comparison
+    const pinnedPaths = new Set(ozPinnedFiles.map((f) => f.path));
     // Sort File by Name or Last Content Update, moving pinned files to the front
     sortedfileList = sortedfileList.sort((a, b) => {
-        if (ozPinnedFiles.some((f) => f.path === a.path) && !ozPinnedFiles.some((f) => f.path === b.path)) {
+        const aPinned = pinnedPaths.has(a.path);
+        const bPinned = pinnedPaths.has(b.path);
+        if (aPinned && !bPinned) {
             return -1;
-        } else if (!ozPinnedFiles.some((f) => f.path === a.path) && ozPinnedFiles.some((f) => f.path === b.path)) {
+        } else if (!aPinned && bPinned) {
             return 1;
         }
         if (plugin.settings.sortReverse) {

@@ -9,6 +9,28 @@ import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
 import { TFolder } from 'obsidian';
 
+// Shared IntersectionObserver for all lazy-loaded rows: one observer per file list,
+// not one per row. Keeps the same 100px rootMargin and "latch on" behavior.
+const lazyObserverCallbacks = new Map<Element, () => void>();
+const lazyObserver =
+    typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(
+              (entries) => {
+                  for (const entry of entries) {
+                      if (entry.isIntersecting) {
+                          const cb = lazyObserverCallbacks.get(entry.target);
+                          if (cb) {
+                              cb();
+                              lazyObserver.unobserve(entry.target);
+                              lazyObserverCallbacks.delete(entry.target);
+                          }
+                      }
+                  }
+              },
+              { rootMargin: '100px 0px' }
+          )
+        : null;
+
 /** Lightweight lazy-load using IntersectionObserver. Replaces react-lazy-load. */
 function LazyLoad({ children, height }: { children: React.ReactNode; height: number }) {
     const [visible, setVisible] = useState(false);
@@ -16,21 +38,27 @@ function LazyLoad({ children, height }: { children: React.ReactNode; height: num
 
     useEffect(() => {
         const el = ref.current;
-        if (!el) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setVisible(true);
-                    observer.disconnect();
-                }
-            },
-            { rootMargin: '100px 0px' }
-        );
-        observer.observe(el);
-        return () => observer.disconnect();
+        if (!el || !lazyObserver) return;
+        lazyObserverCallbacks.set(el, () => setVisible(true));
+        lazyObserver.observe(el);
+        return () => {
+            lazyObserverCallbacks.delete(el);
+            lazyObserver.unobserve(el);
+        };
     }, []);
 
     return <div ref={ref} style={{ minHeight: visible ? undefined : height }}>{visible ? children : null}</div>;
+}
+
+// Insert into a descending-mtime array, keeping equal-mtime items in their original (stable) order.
+// The mtime is passed in (already normalized with `?? 0`) so missing stats behave exactly
+// like the full-sort implementation this replaces.
+function insertIntoTopK(arr: OZFile[], file: OZFile, mtime: number) {
+    let i = arr.length;
+    while (i > 0 && (arr[i - 1].stat?.mtime ?? 0) < mtime) {
+        i--;
+    }
+    arr.splice(i, 0, file);
 }
 
 interface FilesProps {
@@ -130,6 +158,10 @@ export function FileComponent(props: FilesProps) {
     // Cancel pending debounce on unmount
     useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
+    // One Set per list render instead of a store subscription per row: NavFile receives
+    // `isPinned` as a plain prop, so only the rows whose pin state changed re-render.
+    const ozPinnedPaths = useMemo(() => new Set(ozPinnedFiles.map((f) => f.path)), [ozPinnedFiles]);
+
     const filesToList: OZFile[] = useMemo(
         () =>
             FileViewHandlers.sortedFiles({
@@ -145,10 +177,20 @@ export function FileComponent(props: FilesProps) {
         const ranks = new Map<string, number>();
         if (!plugin.settings.highlightRecentFiles) return ranks;
         const count = plugin.settings.recentFilesCount;
-        // Sort files by mtime descending (most recent first)
-        const sorted = [...ozFileList].sort((a, b) => (b.stat?.mtime ?? 0) - (a.stat?.mtime ?? 0));
-        for (let i = 0; i < Math.min(count, sorted.length); i++) {
-            ranks.set(sorted[i].path, i);
+        if (count <= 0) return ranks;
+        // O(n) top-K pass, preserving the same tie ordering as the previous stable full sort
+        const topK: OZFile[] = [];
+        for (const file of ozFileList) {
+            const mtime = file.stat?.mtime ?? 0;
+            if (topK.length < count) {
+                insertIntoTopK(topK, file, mtime);
+            } else if (mtime > (topK[count - 1].stat?.mtime ?? 0)) {
+                insertIntoTopK(topK, file, mtime);
+                topK.pop();
+            }
+        }
+        for (let i = 0; i < topK.length; i++) {
+            ranks.set(topK[i].path, i);
         }
         return ranks;
     }, [ozFileList, plugin.settings.highlightRecentFiles, plugin.settings.recentFilesCount]);
@@ -381,13 +423,15 @@ export function FileComponent(props: FilesProps) {
                         }`}>
                         {filesToList.map((file, index) => {
                             return (
-                                <LazyLoad height={22} key={index}>
+                                <LazyLoad height={22} key={file.path}>
                                     <NavFile
                                         file={file}
                                         plugin={plugin}
                                         recentRank={recentFileRanks.get(file.path)}
-                                        subfolderIndicatorInfo={subfolderIndicatorInfo}
                                         activeFolderPath={activeFolderPath}
+                                        isPinned={ozPinnedPaths.has(file.path)}
+                                        subfolderIndicatorVisible={subfolderIndicatorInfo.visible}
+                                        subfolderColorMap={subfolderIndicatorInfo.colorIndexByPath}
                                     />
                                 </LazyLoad>
                             );
@@ -402,31 +446,41 @@ export function FileComponent(props: FilesProps) {
 
 /* ----------- SINGLE NAVFILE ELEMENT ----------- */
 
-const NavFile = (props: {
+interface NavFileProps {
     file: OZFile;
     plugin: FileTreeAlternativePlugin;
     recentRank?: number;
-    subfolderIndicatorInfo: SubfolderIndicatorInfo;
     activeFolderPath: string;
-}) => {
-    const { file, plugin, recentRank, subfolderIndicatorInfo, activeFolderPath } = props;
+    isPinned: boolean;
+    subfolderIndicatorVisible: boolean;
+    subfolderColorMap?: Map<string, number>;
+}
 
-    const ozPinnedFiles = usePluginStore((s) => s.ozPinnedFileList);
+const NavFile = React.memo((props: NavFileProps) => {
+    const { file, plugin, recentRank, activeFolderPath, isPinned, subfolderIndicatorVisible, subfolderColorMap } = props;
+
+    // Pin state arrives via the `isPinned` prop (parent re-renders on pin changes for the
+    // re-sort anyway). Context-menu handlers read the pin list at event time instead.
     const setOzPinnedFiles = usePluginStore((s) => s.setOzPinnedFileList);
-    const activeOzFile = usePluginStore((s) => s.activeOZFile);
+    const isActive = usePluginStore((s) => s.activeOZFile?.path === file.path);
     const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
 
     const [hoverActive, setHoverActive] = useState<boolean>(false);
 
-    const longPressEvents = useLongPress((e: React.TouchEvent) => {
-        FileViewHandlers.triggerContextMenu({
-            file,
-            e,
-            plugin,
-            ozPinnedFiles,
-            setOzPinnedFiles,
-        });
-    }, 500);
+    const handleLongPress = useCallback(
+        (e: React.TouchEvent) => {
+            FileViewHandlers.triggerContextMenu({
+                file,
+                e,
+                plugin,
+                ozPinnedFiles: usePluginStore.getState().ozPinnedFileList,
+                setOzPinnedFiles,
+            });
+        },
+        [file, plugin, setOzPinnedFiles]
+    );
+
+    const longPressEvents = useLongPress(handleLongPress, 500);
 
     useEffect(() => {
         const handleKeyDownEvent = (e: KeyboardEvent) => {
@@ -468,21 +522,34 @@ const NavFile = (props: {
     }, [recentRank, plugin.settings.recentFilesCount, useStarForRecent]);
 
     const subfolderIndex = useMemo(() => {
-        if (!subfolderIndicatorInfo.visible) return undefined;
+        if (!subfolderIndicatorVisible) return undefined;
         if (file.parent.path === activeFolderPath) return undefined;
-        return subfolderIndicatorInfo.colorIndexByPath?.get(file.parent.path);
-    }, [subfolderIndicatorInfo, file.parent.path, activeFolderPath]);
+        return subfolderColorMap?.get(file.parent.path);
+    }, [subfolderIndicatorVisible, subfolderColorMap, file.parent.path, activeFolderPath]);
 
     const tintStyle = useMemo(() => {
         if (subfolderIndex === undefined || plugin.settings.subfolderIndicatorStyle !== 'with-indicators') return undefined;
         return { '--oz-fta-subfolder-tint': `var(--oz-fta-subfolder-color-${subfolderIndex})` } as React.CSSProperties;
     }, [subfolderIndex, plugin.settings.subfolderIndicatorStyle]);
 
+    const handleContextMenu = useCallback(
+        (e: React.MouseEvent) => {
+            FileViewHandlers.triggerContextMenu({
+                e,
+                file,
+                plugin,
+                ozPinnedFiles: usePluginStore.getState().ozPinnedFileList,
+                setOzPinnedFiles,
+            });
+        },
+        [file, plugin, setOzPinnedFiles]
+    );
+
     return (
         <div
             className={
                 'oz-nav-file' +
-                (activeOzFile && activeOzFile.path === file.path ? ' is-active' : '') +
+                (isActive ? ' is-active' : '') +
                 recentFileClass +
                 (subfolderIndex !== undefined && plugin.settings.subfolderIndicatorStyle === 'with-indicators'
                     ? ' oz-nav-file-subfolder-tint'
@@ -507,15 +574,7 @@ const NavFile = (props: {
                 })
             }
             onAuxClick={(e) => FileViewHandlers.onAuxClick({ e, plugin, file })}
-            onContextMenu={(e) =>
-                FileViewHandlers.triggerContextMenu({
-                    e,
-                    file,
-                    plugin,
-                    ozPinnedFiles,
-                    setOzPinnedFiles,
-                })
-            }
+            onContextMenu={handleContextMenu}
             onMouseEnter={(e) =>
                 FileViewHandlers.mouseEnteredOnFile({
                     e,
@@ -532,7 +591,7 @@ const NavFile = (props: {
                     {fileDisplayName}
                     {useStarForRecent && <Icons.FaStar className="oz-recent-file-star-icon" size={12} />}
                 </div>
-                {ozPinnedFiles.some((f) => f.path === file.path) && <Icons.FaThumbtack className="oz-nav-file-tag" size={14} />}
+                {isPinned && <Icons.FaThumbtack className="oz-nav-file-tag" size={14} />}
                 {file.extension !== 'md' && <span className="oz-nav-file-tag">{file.extension}</span>}
                 {subfolderIndex !== undefined && plugin.settings.subfolderIndicatorStyle === 'minimal' && (
                     <span
@@ -543,4 +602,4 @@ const NavFile = (props: {
             </div>
         </div>
     );
-};
+});

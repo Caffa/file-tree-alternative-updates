@@ -1,5 +1,5 @@
 import { TAbstractFile, TFile, TFolder, Notice } from 'obsidian';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { FileComponent } from 'components/FileView/FileComponent';
 import { MainFolder } from 'components/FolderView/MainFolder';
 import { SingleViewVertical, SingleViewHorizontal } from 'components/MainView/SingleView';
@@ -106,6 +106,44 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const vaultChangeEvent = (detail: { file: TFile; changeType: VaultChange; oldPath: string }) => {
         handleVaultChanges(detail.file, detail.changeType, detail.oldPath);
     };
+
+    // --> Debounced 'modify' list patching.
+    // Typing fires a vault modify event roughly every 2s; each event used to rebuild the
+    // whole file list synchronously. Instead, accumulate the changed paths in a Set and
+    // patch the list once per quiet second through the shared FileTreeUtils.debounce helper.
+    const pendingModifiedPathsRef = useRef<Set<string>>(new Set());
+    const flushModifiedFiles = useMemo(
+        () =>
+            FileTreeUtils.debounce(() => {
+                const pending = pendingModifiedPathsRef.current;
+                if (pending.size === 0) return;
+                // Resolve each pending path against the vault NOW — skip paths that were
+                // renamed/deleted while pending, and never patch from a stale captured TFile
+                const resolved: OZFile[] = [];
+                for (const path of pending) {
+                    const tFile = plugin.app.vault.getFileByPath(path);
+                    if (tFile) resolved.push(FileTreeUtils.TFile2OZFile(tFile));
+                }
+                pending.clear();
+                if (resolved.length === 0) return;
+                // Patch the CURRENT list in place (order preserved; the existing sortedFiles
+                // memo re-sorts because the array identity changes)
+                const currentFileList = usePluginStore.getState().ozFileList;
+                const indexByPath = new Map(currentFileList.map((f, i) => [f.path, i] as const));
+                let changed = false;
+                const next = [...currentFileList];
+                for (const ozFile of resolved) {
+                    const idx = indexByPath.get(ozFile.path);
+                    if (idx === undefined) continue; // exists in vault but not listed — nothing to patch
+                    next[idx] = ozFile;
+                    changed = true;
+                }
+                if (changed) usePluginStore.getState().setOzFileList(next);
+            }, 1000),
+        [plugin]
+    );
+    // Cancel pending patch on unmount — the list is rebuilt from scratch on mount anyway
+    useEffect(() => () => flushModifiedFiles.cancel(), [flushModifiedFiles]);
 
     const changeActiveFile = (detail: { filePath: string }) => {
         let filePath: string = detail.filePath;
@@ -290,25 +328,27 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                                     return f.path !== file.path;
                                 })
                             );
-                        } else if (
-                            changeType === 'rename' ||
-                            (changeType === 'modify' && (sortFilesBy === 'last-update' || sortFilesBy === 'file-size'))
-                        ) {
+                        } else if (changeType === 'rename') {
+                            // Rename stays synchronous — the active-file fixup below must run now
                             // Fix for Root Folder Path
                             if (currentActiveFolderPath === '/') currentActiveFolderPath = '';
                             // Set the file list
                             setOzFileList([
                                 ...currentFileList.filter((f) => {
-                                    return changeType === 'rename' ? f.path !== oldPathBeforeRename : f.path !== file.path;
+                                    return f.path !== oldPathBeforeRename;
                                 }),
                                 // Include any file that roles up to the current active folder, not only the direct ones
                                 ...(file.parent.path.startsWith(currentActiveFolderPath) ? [FileTreeUtils.TFile2OZFile(file)] : []),
                             ]);
                             // If active file is renamed, change the active file
                             let currentActiveOZFile: OZFile | null = usePluginStore.getState().activeOZFile;
-                            if (changeType === 'rename' && currentActiveOZFile && currentActiveOZFile.path === oldPathBeforeRename) {
+                            if (currentActiveOZFile && currentActiveOZFile.path === oldPathBeforeRename) {
                                 setActiveOzFile(FileTreeUtils.TFile2OZFile(file));
                             }
+                        } else if (changeType === 'modify' && (sortFilesBy === 'last-update' || sortFilesBy === 'file-size')) {
+                            // Modify is debounced: queue the path, patch the list after a quiet second
+                            pendingModifiedPathsRef.current.add(file.path);
+                            flushModifiedFiles();
                         }
                     }
                     // File is no in current view but parent folder is and should be included
