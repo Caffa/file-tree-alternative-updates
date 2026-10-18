@@ -177,7 +177,7 @@ export function FileComponent(props: FilesProps) {
         const ranks = new Map<string, number>();
         if (!plugin.settings.highlightRecentFiles) return ranks;
         const count = plugin.settings.recentFilesCount;
-        if (count <= 0) return ranks;
+        if (!count || count <= 0) return ranks;
         // O(n) top-K pass, preserving the same tie ordering as the previous stable full sort
         const topK: OZFile[] = [];
         for (const file of ozFileList) {
@@ -428,10 +428,12 @@ export function FileComponent(props: FilesProps) {
                                         file={file}
                                         plugin={plugin}
                                         recentRank={recentFileRanks.get(file.path)}
-                                        activeFolderPath={activeFolderPath}
                                         isPinned={ozPinnedPaths.has(file.path)}
-                                        subfolderIndicatorVisible={subfolderIndicatorInfo.visible}
-                                        subfolderColorMap={subfolderIndicatorInfo.colorIndexByPath}
+                                        subfolderIndex={
+                                            subfolderIndicatorInfo.visible && file.parent.path !== activeFolderPath
+                                                ? subfolderIndicatorInfo.colorIndexByPath?.get(file.parent.path)
+                                                : undefined
+                                        }
                                     />
                                 </LazyLoad>
                             );
@@ -450,14 +452,15 @@ interface NavFileProps {
     file: OZFile;
     plugin: FileTreeAlternativePlugin;
     recentRank?: number;
-    activeFolderPath: string;
     isPinned: boolean;
-    subfolderIndicatorVisible: boolean;
-    subfolderColorMap?: Map<string, number>;
+    /** Pre-resolved subfolder colour index for this row (undefined = no indicator).
+     *  Passed as a primitive so React.memo stays effective across debounced list
+     *  flushes — a Map prop would be a fresh object and re-render every row. */
+    subfolderIndex?: number;
 }
 
 const NavFile = React.memo((props: NavFileProps) => {
-    const { file, plugin, recentRank, activeFolderPath, isPinned, subfolderIndicatorVisible, subfolderColorMap } = props;
+    const { file, plugin, recentRank, isPinned, subfolderIndex } = props;
 
     // Pin state arrives via the `isPinned` prop (parent re-renders on pin changes for the
     // re-sort anyway). Context-menu handlers read the pin list at event time instead.
@@ -520,12 +523,6 @@ const NavFile = React.memo((props: NavFileProps) => {
         if (useStarForRecent) return ` oz-recent-file-star oz-recent-file-star-${recentRank}`;
         return ` oz-recent-file-${recentRank}`;
     }, [recentRank, plugin.settings.recentFilesCount, useStarForRecent]);
-
-    const subfolderIndex = useMemo(() => {
-        if (!subfolderIndicatorVisible) return undefined;
-        if (file.parent.path === activeFolderPath) return undefined;
-        return subfolderColorMap?.get(file.parent.path);
-    }, [subfolderIndicatorVisible, subfolderColorMap, file.parent.path, activeFolderPath]);
 
     const tintStyle = useMemo(() => {
         if (subfolderIndex === undefined || plugin.settings.subfolderIndicatorStyle !== 'with-indicators') return undefined;
