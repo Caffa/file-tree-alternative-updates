@@ -9,7 +9,7 @@ import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
 import { TFolder } from 'obsidian';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { registerVirtualFileScroller } from 'utils/virtualListBridge';
+import { registerVirtualFileScroller, unregisterVirtualFileScroller } from 'utils/virtualListBridge';
 
 // Estimated row height before a row is measured (styles.css: 19px line-height + title
 // padding/borders + 1px row border-bottom = 23px). Rows are measured dynamically, so
@@ -247,14 +247,16 @@ export function FileComponent(props: FilesProps) {
     const revealStateRef = useRef({ listIndexByPath, virtualizer });
     revealStateRef.current = { listIndexByPath, virtualizer };
     useEffect(() => {
-        registerVirtualFileScroller((path) => {
+        const scrollerId = registerVirtualFileScroller((path) => {
             const { listIndexByPath: indexByPath, virtualizer: v } = revealStateRef.current;
             const index = indexByPath.get(path);
             if (index === undefined) return false;
             v.scrollToIndex(index, { align: 'center' });
             return true;
         });
-        return () => registerVirtualFileScroller(null);
+        // Reference-counted: a second file-tree leaf's unmount must not kill the
+        // bridge for this leaf (see virtualListBridge)
+        return () => unregisterVirtualFileScroller(scrollerId);
     }, []);
 
     // Go Back Button - Sets Main Component View to Folder

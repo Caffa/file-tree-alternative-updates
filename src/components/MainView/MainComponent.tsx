@@ -9,7 +9,7 @@ import * as FileTreeUtils from 'utils/Utils';
 import { scrollVirtualFileListToFile } from 'utils/virtualListBridge';
 import { usePluginStore } from '../../recoil/pluginStore';
 import useForceUpdate from 'hooks/ForceUpdate';
-import { VaultChange, eventTypes, OZFile } from 'utils/types';
+import { VaultChange, eventTypes, OZFile, FolderFileCountMap } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
 
 interface MainTreeComponentProps {
@@ -112,8 +112,18 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
     // Rebuild folder counts on view refresh so badges stay in sync with filter settings
     const handleRefreshView = () => {
-        if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+        if (plugin.settings.folderCount) writeFolderCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
         forceUpdate();
+    };
+
+    // All non-chunked folder-count writes bump the generation token first, so an
+    // in-flight chunked startup build (with pre-event/pre-filter data) can never
+    // land its stale map after a fresher write. The chunked build's own final
+    // write goes through setFolderFileCountMap directly (no bump — it IS the
+    // generation the token guards).
+    const writeFolderCountMap = (map: FolderFileCountMap) => {
+        FileTreeUtils.bumpFolderCountGeneration();
+        setFolderFileCountMap(map);
     };
 
     const vaultChangeEvent = (detail: { file: TFile; changeType: VaultChange; oldPath: string }) => {
@@ -230,7 +240,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             skipCountRebuildOnMountRef.current = false;
             return;
         }
-        if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+        if (plugin.settings.folderCount) writeFolderCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
     }, [excludedExtensions, excludedFolders]);
 
     const setInitialFocusedFolder = () => {
@@ -448,29 +458,40 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                 excludeFolderNotes: plugin.settings.folderNote,
             };
             // Never ship a corrupt badge map: any anomaly falls back to a full rebuild
-            const fullRebuild = () => setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+            const fullRebuild = () => writeFolderCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
 
             if (file instanceof TFolder) {
                 if (changeType === 'rename' && oldPathBeforeRename) {
                     // Remap the old folder's keys (and its subfolders') to the new prefix
                     const remapped = FileTreeUtils.remapFolderCountKeys(currentMap, oldPathBeforeRename, file.path);
-                    setFolderFileCountMap(remapped ?? FileTreeUtils.getFolderNoteCountMap(plugin));
+                    writeFolderCountMap(remapped ?? FileTreeUtils.getFolderNoteCountMap(plugin));
                 } else if ((changeType === 'create' || changeType === 'delete') && file.children) {
                     // Children still enumerable on the event object: walk the captured
-                    // subtree once; per-file increments match the create/delete rules
-                    setFolderFileCountMap(
-                        FileTreeUtils.applySubtreeCountDelta({ ...currentMap }, file, changeType === 'create' ? 1 : -1, visibilityOptions)
-                    );
+                    // subtree once; per-file increments match the create/delete rules.
+                    // An empty-but-truthy children array (detached before the event)
+                    // walks nothing — if the map still owns entries under the folder's
+                    // prefix and the walk changed nothing, fall back to a full rebuild
+                    // instead of leaving badges too high.
+                    const next = { ...currentMap };
+                    const before = JSON.stringify(next);
+                    FileTreeUtils.applySubtreeCountDelta(next, file, changeType === 'create' ? 1 : -1, visibilityOptions);
+                    const prefix = file.path + '/';
+                    const mapOwnsEntries = Object.keys(next).some((key) => key === file.path || key.startsWith(prefix));
+                    if (JSON.stringify(next) === before && mapOwnsEntries) {
+                        fullRebuild();
+                    } else {
+                        writeFolderCountMap(next);
+                    }
                 } else {
                     // Deleted folder whose children are gone, or unexpected combination
                     fullRebuild();
                 }
             } else if (file instanceof TFile && changeType === 'create') {
                 // Incremental: +1 for create
-                setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, 1, visibilityOptions));
+                writeFolderCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, 1, visibilityOptions));
             } else if (file instanceof TFile && changeType === 'delete') {
                 // Incremental: -1 for delete
-                setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, -1, visibilityOptions));
+                writeFolderCountMap(FileTreeUtils.incrementFolderCountMap({ ...currentMap }, file, -1, visibilityOptions));
             } else if (file instanceof TFile && changeType === 'rename' && oldPathBeforeRename) {
                 const oldParentPath = oldPathBeforeRename.substring(0, oldPathBeforeRename.lastIndexOf('/')) || '/';
                 const newParentPath = file.parent ? file.parent.path : '/';
@@ -485,8 +506,17 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                     if (!oldParent) {
                         fullRebuild();
                     } else {
-                        const decremented = FileTreeUtils.incrementFolderCountMap({ ...currentMap }, { ...file, parent: oldParent }, -1, visibilityOptions);
-                        setFolderFileCountMap(FileTreeUtils.incrementFolderCountMap(decremented, file, 1, visibilityOptions));
+                        // Evaluate visibility against the OLD location: `file.path` is the
+                        // NEW path, so include the pre-rename path or the attachments
+                        // substring check (and folder-note/excludedFolders checks) would
+                        // mix old-parent with new-path while decrementing the old chain.
+                        const decremented = FileTreeUtils.incrementFolderCountMap(
+                            { ...currentMap },
+                            { ...file, path: oldPathBeforeRename, parent: oldParent },
+                            -1,
+                            visibilityOptions
+                        );
+                        writeFolderCountMap(FileTreeUtils.incrementFolderCountMap(decremented, file, 1, visibilityOptions));
                     }
                 } else {
                     // Name changed together with location (or in place): folder-note /

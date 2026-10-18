@@ -149,6 +149,20 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin, filters
 };
 
 /**
+ * Generation token for folder-count writes: bumped by every non-chunked writer
+ * of folderFileCountMap (exclusion-change rebuild, event-time full rebuilds and
+ * incremental updates). The chunked startup build captures the generation when
+ * it starts and silently discards itself if any newer write happened meanwhile —
+ * an exclusions/settings change mid-build must land last, never a stale-filter map.
+ */
+let folderCountGeneration = 0;
+
+/** Bump the folder-count generation (call before every non-chunked count write). */
+export const bumpFolderCountGeneration = (): void => {
+    folderCountGeneration++;
+};
+
+/**
  * Chunked initial folder-count build for large vaults: same final map as
  * getFolderNoteCountMap (visible files only, open = direct-parent count,
  * closed = subtree count, root included, no entries for folders without
@@ -161,9 +175,13 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin, filters
 export const buildFolderCountMapChunked = (plugin: FileTreeAlternativePlugin, onComplete: (counts: FolderFileCountMap) => void): (() => void) => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // Stale-build guard: a non-chunked writer bumping the generation mid-build
+    // no-ops both the remaining chunks and the final store write
+    const generation = folderCountGeneration;
+    const isStale = () => cancelled || generation !== folderCountGeneration;
 
     const raf = requestAnimationFrame(() => {
-        if (cancelled) return;
+        if (isStale()) return;
 
         // Same filter inputs as getFolderNoteCountMap (store state matches the listing)
         const storeState = usePluginStore.getState();
@@ -202,7 +220,7 @@ export const buildFolderCountMapChunked = (plugin: FileTreeAlternativePlugin, on
         const BATCH_SIZE = 500;
 
         const step = () => {
-            if (cancelled) return;
+            if (isStale()) return;
             const end = Math.min(index + BATCH_SIZE, folders.length);
             for (; index < end; index++) {
                 const entry = folders[index];
@@ -217,7 +235,7 @@ export const buildFolderCountMapChunked = (plugin: FileTreeAlternativePlugin, on
             }
             if (index < folders.length) {
                 timer = setTimeout(step, 0);
-            } else {
+            } else if (!isStale()) {
                 onComplete(counts);
             }
         };
