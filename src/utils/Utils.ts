@@ -148,6 +148,89 @@ export const getFolderNoteCountMap = (plugin: FileTreeAlternativePlugin, filters
     return counts;
 };
 
+/**
+ * Chunked initial folder-count build for large vaults: same final map as
+ * getFolderNoteCountMap (visible files only, open = direct-parent count,
+ * closed = subtree count, root included, no entries for folders without
+ * visible files), but folders are processed in slices of ~500 chained with
+ * setTimeout(0) so startup never blocks in one long pass.
+ * requestIdleCallback is NOT available in iOS WKWebView, hence setTimeout.
+ * Starts after the first paint via one requestAnimationFrame.
+ * Returns a cancel function.
+ */
+export const buildFolderCountMapChunked = (plugin: FileTreeAlternativePlugin, onComplete: (counts: FolderFileCountMap) => void): (() => void) => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const raf = requestAnimationFrame(() => {
+        if (cancelled) return;
+
+        // Same filter inputs as getFolderNoteCountMap (store state matches the listing)
+        const storeState = usePluginStore.getState();
+        const visibilityOptions: FileVisibilityOptions = {
+            excludedExtensions: storeState.excludedExtensions ?? [],
+            excludedFolders: storeState.excludedFolders ?? [],
+            hideAttachments: plugin.settings.hideAttachments,
+            attachmentsFolderName: plugin.settings.attachmentsFolderName,
+            folderCountOption: plugin.settings.folderCountOption,
+            excludeFolderNotes: plugin.settings.folderNote,
+        };
+
+        // Group visible files by direct parent path in one pass: open(folder) = direct count
+        const directCounts = new Map<string, number>();
+        const files = plugin.settings.folderCountOption === 'notes' ? plugin.app.vault.getMarkdownFiles() : plugin.app.vault.getFiles();
+        for (const file of files) {
+            if (!isFileVisibleInList(file, visibilityOptions)) continue;
+            const parentPath = file.parent ? file.parent.path : '/';
+            directCounts.set(parentPath, (directCounts.get(parentPath) ?? 0) + 1);
+        }
+
+        // All folders, deepest first, so every subfolder completes before its parent;
+        // a completed folder folds its closed total into the parent's accumulator
+        const folders: { folder: TFolder; depth: number }[] = [];
+        const collect = (folder: TFolder, depth: number) => {
+            folders.push({ folder, depth });
+            if (folder.children) for (const child of folder.children) if (child instanceof TFolder) collect(child, depth + 1);
+        };
+        collect(plugin.app.vault.getRoot(), 0);
+        folders.sort((a, b) => b.depth - a.depth);
+
+        const counts: FolderFileCountMap = {};
+        // closed totals of completed child folders, waiting for their parent's batch
+        const closedFromChildren = new Map<string, number>();
+        let index = 0;
+        const BATCH_SIZE = 500;
+
+        const step = () => {
+            if (cancelled) return;
+            const end = Math.min(index + BATCH_SIZE, folders.length);
+            for (; index < end; index++) {
+                const entry = folders[index];
+                const open = directCounts.get(entry.folder.path) ?? 0;
+                const closed = open + (closedFromChildren.get(entry.folder.path) ?? 0);
+                closedFromChildren.delete(entry.folder.path);
+                // Mirror getFolderNoteCountMap: no entries for folders without visible files
+                if (closed > 0) counts[entry.folder.path] = { open, closed };
+                if (entry.folder.parent) {
+                    closedFromChildren.set(entry.folder.parent.path, (closedFromChildren.get(entry.folder.parent.path) ?? 0) + closed);
+                }
+            }
+            if (index < folders.length) {
+                timer = setTimeout(step, 0);
+            } else {
+                onComplete(counts);
+            }
+        };
+        step();
+    });
+
+    return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        if (timer !== null) clearTimeout(timer);
+    };
+};
+
 /** Incremental folder count update: add or remove a single file from the count map without rebuilding everything.
  *  @param map - existing count map (will be mutated and returned)
  *  @param file - the file being created or deleted

@@ -196,7 +196,14 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         setOpenFolders(getOpenFoldersFromSettings());
         setShowSubFolders(plugin.settings.showFilesFromSubFolders);
         setInitialActiveFolderPath();
-        if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+        // Chunked initial count build: starts after first paint, then processes folders
+        // in setTimeout-chained slices (~500 each). requestIdleCallback is unavailable
+        // in iOS WKWebView, hence setTimeout. Same final map as a full rebuild.
+        let cancelCountBuild: (() => void) | null = null;
+        if (plugin.settings.folderCount) {
+            cancelCountBuild = FileTreeUtils.buildFolderCountMapChunked(plugin, setFolderFileCountMap);
+        }
+        return () => cancelCountBuild?.();
     }, []);
 
     // Each Focused Folder Change triggers new folder tree build
@@ -213,8 +220,16 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         }
     }, [focusedFolder, excludedFolders]);
 
-    // Rebuild folder count map when exclusion filters change so badges match listings
+    // Rebuild folder count map when exclusion filters change so badges match listings.
+    // (First run skipped: the initial chunked build already uses the loaded filter
+    // values, and the mount-time zustand identity change would otherwise trigger a
+    // duplicate synchronous full pass that defeats the chunked build.)
+    const skipCountRebuildOnMountRef = useRef(true);
     useEffect(() => {
+        if (skipCountRebuildOnMountRef.current) {
+            skipCountRebuildOnMountRef.current = false;
+            return;
+        }
         if (plugin.settings.folderCount) setFolderFileCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
     }, [excludedExtensions, excludedFolders]);
 
