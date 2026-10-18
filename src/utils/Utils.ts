@@ -80,6 +80,9 @@ export const getFilesUnderPath = (params: {
 // change, modify flush, search, vault event) can invalidate an in-flight build:
 // a slice write from a superseded build must never land after a fresher list write.
 let fileListBuildToken = 0;
+// Module-level ⇒ shared across FileComponent instances. Safe today because the
+// plugin dedupes file-tree leaves (deduplicateFileTreeLeaves) so only one list
+// build runs at a time; revisit if multi-leaf support is ever added.
 let fileListBuildTimer: ReturnType<typeof setTimeout> | null = null;
 let fileListBuildActive = false;
 

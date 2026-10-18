@@ -454,15 +454,25 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                     }
                     // File is no in current view but parent folder is and should be included
                     else if (fileInCurrentFolder && !fileInCurrentView) {
-                        setOzFileList([...currentFileList, FileTreeUtils.TFile2OZFile(file)]);
+                        // C2: while a chunked mobile build is in flight, currentFileList
+                        // is a partial slice, so fileInCurrentView is a false negative —
+                        // appending here would materialize a ghost row (e.g. re-adding a
+                        // just-deleted file) for one paint. The in-flight rebuild owns
+                        // the list state; let it land the correct rows.
+                        if (!FileTreeUtils.isChunkedFileListBuildActive()) {
+                            setOzFileList([...currentFileList, FileTreeUtils.TFile2OZFile(file)]);
+                        }
                     }
                 } else if (changeType === 'create') {
                     // Use startsWith instead of regex — faster and avoids regex-special-char bugs in folder names
                     let fileIsCreatedUnderActiveFolder =
                         currentActiveFolderPath === '/' || file.path.startsWith(currentActiveFolderPath + '/');
                     if (fileIsCreatedUnderActiveFolder) {
-                        // If file is not already in the list, add into view
-                        if (!currentFileList.some((f) => f.path === file.path)) {
+                        // If file is not already in the list, add into view.
+                        // C2: same partial-slice caveat — during an active chunked build
+                        // the append no-ops; the restarted build's snapshot already
+                        // contains the new file and a later slice will land it.
+                        if (!currentFileList.some((f) => f.path === file.path) && !FileTreeUtils.isChunkedFileListBuildActive()) {
                             setOzFileList([...currentFileList, FileTreeUtils.TFile2OZFile(file)]);
                         }
                     }
@@ -573,8 +583,15 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // --> During file list change, scroll only when a user explicitly revealed a file
     useEffect(() => {
         if (needsScrollRef.current && activeOZFile && ozFileList.length > 0) {
-            scrollToFile(activeOZFile);
-            needsScrollRef.current = false;
+            const scrolled = scrollToFile(activeOZFile);
+            // Consume the flag on success, or give up gracefully once no chunked
+            // build is active (target absent from the final complete list, e.g.
+            // deleted mid-build). C2: during a chunked mobile build this effect
+            // fires on the FIRST slice only — keep the flag set so later slices
+            // re-run it and complete the reveal on the slice containing the file.
+            if (scrolled || !FileTreeUtils.isChunkedFileListBuildActive()) {
+                needsScrollRef.current = false;
+            }
         }
     }, [ozFileList]);
 
@@ -599,13 +616,21 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     }
 
     // Scrolling Functions
-    function scrollToFile(fileToScroll: OZFile) {
+    // Returns true when the row was found and scrolled: the bridge reports whether
+    // the path is in the virtual list's index, and the DOM fallback reports whether
+    // the element exists. C2 uses this to decide if a reveal is done or must be
+    // retried by a later slice of a chunked mobile list build.
+    function scrollToFile(fileToScroll: OZFile): boolean {
         // The virtualized list scrolls by index (rows outside the window are not in the
         // DOM); fall back to the legacy DOM query when no virtual list is mounted.
-        if (scrollVirtualFileListToFile(fileToScroll.path)) return;
+        if (scrollVirtualFileListToFile(fileToScroll.path)) return true;
         const selector = `div.oz-file-tree-files div.oz-nav-file-title[data-path="${fileToScroll.path}"]`;
         const fileTitleElement = document.querySelector(selector);
-        if (fileTitleElement) fileTitleElement.scrollIntoView(false);
+        if (fileTitleElement) {
+            fileTitleElement.scrollIntoView(false);
+            return true;
+        }
+        return false;
     }
 
     function scrollToFolder(folder: TFolder) {
