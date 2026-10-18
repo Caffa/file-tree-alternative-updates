@@ -201,12 +201,28 @@ export function FileComponent(props: FilesProps) {
     // Distance between the scroll container's content start and the first row (the
     // header + padding above the list). Keeps the virtual window aligned with what is
     // actually on screen — including with the sticky fixed header or the search box.
-    useLayoutEffect(() => {
+    // TanStack includes scrollMargin in virtualRow.start but excludes it from
+    // getTotalSize(), so row transforms must subtract it (scrollMargin contract).
+    const measureScrollMargin = useCallback(() => {
         const inner = fileListInnerRef.current;
         if (!inner || !scrollElement) return;
-        const margin = inner.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop;
-        setScrollMargin(margin);
-    }, [scrollElement, searchBoxVisible]);
+        setScrollMargin(inner.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop);
+    }, [scrollElement]);
+
+    useLayoutEffect(() => {
+        measureScrollMargin();
+    }, [scrollElement, searchBoxVisible, measureScrollMargin]);
+
+    // The margin is defined by the header wrapper's height — re-measure when that
+    // height changes after mount (font/theme changes, width re-wrap on divider drag),
+    // otherwise the scrollMargin goes stale and the virtual window drifts.
+    useEffect(() => {
+        const header = fileListRef.current?.previousElementSibling;
+        if (!header || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => measureScrollMargin());
+        observer.observe(header);
+        return () => observer.disconnect();
+    }, [measureScrollMargin]);
 
     const virtualizer = useVirtualizer({
         count: filesToList.length,
@@ -465,7 +481,10 @@ export function FileComponent(props: FilesProps) {
                                             top: 0,
                                             left: 0,
                                             width: '100%',
-                                            transform: `translateY(${virtualRow.start}px)`,
+                                            // virtualRow.start includes scrollMargin, but rows are
+                                            // positioned inside the (margin-less) sized spacer —
+                                            // subtract it or every row renders ~header-height too low.
+                                            transform: `translateY(${virtualRow.start - scrollMargin}px)`,
                                         }}>
                                         <NavFile
                                             file={file}
