@@ -6,6 +6,7 @@ import { SingleViewVertical, SingleViewHorizontal } from 'components/MainView/Si
 import { FileTreeView } from 'FileTreeView';
 import FileTreeAlternativePlugin from 'main';
 import * as FileTreeUtils from 'utils/Utils';
+import { scrollVirtualFileListToFile } from 'utils/virtualListBridge';
 import { usePluginStore } from '../../recoil/pluginStore';
 import useForceUpdate from 'hooks/ForceUpdate';
 import { VaultChange, eventTypes, OZFile } from 'utils/types';
@@ -440,6 +441,9 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
     // Scrolling Functions
     function scrollToFile(fileToScroll: OZFile) {
+        // The virtualized list scrolls by index (rows outside the window are not in the
+        // DOM); fall back to the legacy DOM query when no virtual list is mounted.
+        if (scrollVirtualFileListToFile(fileToScroll.path)) return;
         const selector = `div.oz-file-tree-files div.oz-nav-file-title[data-path="${fileToScroll.path}"]`;
         const fileTitleElement = document.querySelector(selector);
         if (fileTitleElement) fileTitleElement.scrollIntoView(false);

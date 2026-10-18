@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
 import * as Icons from 'utils/icons';
 import FileTreeAlternativePlugin from 'main';
 import { OZFile } from 'utils/types';
@@ -8,47 +8,14 @@ import useForceUpdate from 'hooks/ForceUpdate';
 import useLongPress from 'hooks/useLongPress';
 import * as FileViewHandlers from 'components/FileView/handlers';
 import { TFolder } from 'obsidian';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { registerVirtualFileScroller } from 'utils/virtualListBridge';
 
-// Shared IntersectionObserver for all lazy-loaded rows: one observer per file list,
-// not one per row. Keeps the same 100px rootMargin and "latch on" behavior.
-const lazyObserverCallbacks = new Map<Element, () => void>();
-const lazyObserver =
-    typeof IntersectionObserver !== 'undefined'
-        ? new IntersectionObserver(
-              (entries) => {
-                  for (const entry of entries) {
-                      if (entry.isIntersecting) {
-                          const cb = lazyObserverCallbacks.get(entry.target);
-                          if (cb) {
-                              cb();
-                              lazyObserver.unobserve(entry.target);
-                              lazyObserverCallbacks.delete(entry.target);
-                          }
-                      }
-                  }
-              },
-              { rootMargin: '100px 0px' }
-          )
-        : null;
-
-/** Lightweight lazy-load using IntersectionObserver. Replaces react-lazy-load. */
-function LazyLoad({ children, height }: { children: React.ReactNode; height: number }) {
-    const [visible, setVisible] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const el = ref.current;
-        if (!el || !lazyObserver) return;
-        lazyObserverCallbacks.set(el, () => setVisible(true));
-        lazyObserver.observe(el);
-        return () => {
-            lazyObserverCallbacks.delete(el);
-            lazyObserver.unobserve(el);
-        };
-    }, []);
-
-    return <div ref={ref} style={{ minHeight: visible ? undefined : height }}>{visible ? children : null}</div>;
-}
+// Estimated row height before a row is measured (styles.css: 19px line-height + title
+// padding/borders + 1px row border-bottom = 23px). Rows are measured dynamically, so
+// this only shapes the first paint and the estimate for not-yet-measured rows.
+const ROW_HEIGHT_ESTIMATE = 23;
+const ROW_OVERSCAN = 5;
 
 // Insert into a descending-mtime array, keeping equal-mtime items in their original (stable) order.
 // The mtime is passed in (already normalized with `?? 0`) so missing stats behave exactly
@@ -213,6 +180,66 @@ export function FileComponent(props: FilesProps) {
         });
         return { visible: true, colorIndexByPath } as SubfolderIndicatorInfo;
     }, [filesToList, activeFolderPath, plugin.settings.subfolderIndicatorStyle]);
+
+    // --- Virtualization ---
+    // The scroll container is the pane around this component (Vertical/Horizontal
+    // single view wrap FileComponent in .oz-file-list-pane*); the classic (Disabled)
+    // view falls back to Obsidian's view content.
+    const fileListRef = useRef<HTMLDivElement>(null);
+    const fileListInnerRef = useRef<HTMLDivElement>(null);
+    const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+    const [scrollMargin, setScrollMargin] = useState(0);
+
+    useLayoutEffect(() => {
+        setScrollElement(
+            fileListRef.current?.closest<HTMLElement>('.oz-file-list-pane, .oz-file-list-pane-horizontal') ??
+                fileListRef.current?.closest<HTMLElement>('.view-content') ??
+                null
+        );
+    }, []);
+
+    // Distance between the scroll container's content start and the first row (the
+    // header + padding above the list). Keeps the virtual window aligned with what is
+    // actually on screen — including with the sticky fixed header or the search box.
+    useLayoutEffect(() => {
+        const inner = fileListInnerRef.current;
+        if (!inner || !scrollElement) return;
+        const margin = inner.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop;
+        setScrollMargin(margin);
+    }, [scrollElement, searchBoxVisible]);
+
+    const virtualizer = useVirtualizer({
+        count: filesToList.length,
+        getScrollElement: () => scrollElement,
+        estimateSize: () => ROW_HEIGHT_ESTIMATE,
+        overscan: ROW_OVERSCAN,
+        getItemKey: (index) => filesToList[index].path,
+        scrollMargin,
+    });
+
+    // O(1) path → row index for the reveal/scroll wiring (rebuilt with the list, cheap O(n))
+    const listIndexByPath = useMemo(() => {
+        const map = new Map<string, number>();
+        for (let i = 0; i < filesToList.length; i++) map.set(filesToList[i].path, i);
+        return map;
+    }, [filesToList]);
+
+    // Reveal bridge: MainComponent asks this list to scroll to a path. Rows outside the
+    // virtual window don't exist in the DOM, so the old querySelector scroll can miss
+    // them — the virtualizer scrolls to unmounted rows by index instead. Reads go
+    // through a ref so the registered callback never closes over stale list state.
+    const revealStateRef = useRef({ listIndexByPath, virtualizer });
+    revealStateRef.current = { listIndexByPath, virtualizer };
+    useEffect(() => {
+        registerVirtualFileScroller((path) => {
+            const { listIndexByPath: indexByPath, virtualizer: v } = revealStateRef.current;
+            const index = indexByPath.get(path);
+            if (index === undefined) return false;
+            v.scrollToIndex(index, { align: 'center' });
+            return true;
+        });
+        return () => registerVirtualFileScroller(null);
+    }, []);
 
     // Go Back Button - Sets Main Component View to Folder
     const handleGoBack = (e: React.MouseEvent) => {
@@ -412,7 +439,10 @@ export function FileComponent(props: FilesProps) {
                     </div>
                     {/* End: Header */}
 
-                    {/* File List */}
+                    {/* File List — virtualized: only the visible window (+ overscan) is mounted.
+                        The scroll container is the parent pane (.oz-file-list-pane*), rows are
+                        absolutely positioned inside a sized spacer, and the virtual window
+                        replaces the old per-row IntersectionObserver lazy loading. */}
                     <div
                         className={`oz-file-tree-files${
                             plugin.settings.fixedHeaderInFileList
@@ -420,24 +450,38 @@ export function FileComponent(props: FilesProps) {
                                     ? ' file-tree-files-fixed-with-search'
                                     : ' file-tree-files-fixed'
                                 : ''
-                        }`}>
-                        {filesToList.map((file, index) => {
-                            return (
-                                <LazyLoad height={22} key={file.path}>
-                                    <NavFile
-                                        file={file}
-                                        plugin={plugin}
-                                        recentRank={recentFileRanks.get(file.path)}
-                                        isPinned={ozPinnedPaths.has(file.path)}
-                                        subfolderIndex={
-                                            subfolderIndicatorInfo.visible && file.parent.path !== activeFolderPath
-                                                ? subfolderIndicatorInfo.colorIndexByPath?.get(file.parent.path)
-                                                : undefined
-                                        }
-                                    />
-                                </LazyLoad>
-                            );
-                        })}
+                        }`}
+                        ref={fileListRef}>
+                        <div ref={fileListInnerRef} style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+                            {virtualizer.getVirtualItems().map((virtualRow) => {
+                                const file = filesToList[virtualRow.index];
+                                return (
+                                    <div
+                                        key={String(virtualRow.key)}
+                                        data-index={virtualRow.index}
+                                        ref={virtualizer.measureElement}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            transform: `translateY(${virtualRow.start}px)`,
+                                        }}>
+                                        <NavFile
+                                            file={file}
+                                            plugin={plugin}
+                                            recentRank={recentFileRanks.get(file.path)}
+                                            isPinned={ozPinnedPaths.has(file.path)}
+                                            subfolderIndex={
+                                                subfolderIndicatorInfo.visible && file.parent.path !== activeFolderPath
+                                                    ? subfolderIndicatorInfo.colorIndexByPath?.get(file.parent.path)
+                                                    : undefined
+                                            }
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                     {/* End: File List */}
                 </div>
