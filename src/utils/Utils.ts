@@ -26,16 +26,18 @@ export const isFileVisibleInList = (file: TFile, opts: FileVisibilityOptions): b
     return true;
 };
 
-// Helper Function To Get List of Files
-export const getFilesUnderPath = (params: {
+// Helper Function To Get List of visible TFiles under a path (same filters as
+// getFilesUnderPath, without converting to OZFile — used by the chunked mobile
+// list build so the per-file conversion can be sliced)
+export const getVisibleTFilesUnderPath = (params: {
     path: string;
     plugin: FileTreeAlternativePlugin;
     excludedExtensions: string[];
     excludedFolders: string[];
     getAllFiles?: boolean;
-}): OZFile[] => {
+}): TFile[] => {
     const { path, plugin, getAllFiles, excludedExtensions, excludedFolders } = params;
-    const filesUnderPath: OZFile[] = [];
+    const filesUnderPath: TFile[] = [];
     const showFilesFromSubFolders = getAllFiles ? true : plugin.settings.showFilesFromSubFolders;
     const folderObj = plugin.app.vault.getFolderByPath(path);
     if (!folderObj) return filesUnderPath;
@@ -53,13 +55,104 @@ export const getFilesUnderPath = (params: {
                         })
                     )
                         continue;
-                    filesUnderPath.push(TFile2OZFile(child));
+                    filesUnderPath.push(child);
                 }
                 if (child instanceof TFolder && showFilesFromSubFolders) recursiveFx(child, app);
             }
         }
     }
     return filesUnderPath;
+};
+
+// Helper Function To Get List of Files
+export const getFilesUnderPath = (params: {
+    path: string;
+    plugin: FileTreeAlternativePlugin;
+    excludedExtensions: string[];
+    excludedFolders: string[];
+    getAllFiles?: boolean;
+}): OZFile[] => {
+    return getVisibleTFilesUnderPath(params).map(TFile2OZFile);
+};
+
+// --- C2: chunked initial file-list build (mobile, large lists) ---
+// Module-level generation token so EVERY list writer (folder switch, filter
+// change, modify flush, search, vault event) can invalidate an in-flight build:
+// a slice write from a superseded build must never land after a fresher list write.
+let fileListBuildToken = 0;
+let fileListBuildTimer: ReturnType<typeof setTimeout> | null = null;
+let fileListBuildActive = false;
+
+/** True while a chunked mobile list build is still appending slices to the store. */
+export const isChunkedFileListBuildActive = (): boolean => fileListBuildActive;
+
+/** Cancel any in-flight chunked list build (bumps the generation token; the
+ *  next slice step discards itself and pending timers are cleared). */
+export const cancelChunkedFileListBuild = (): void => {
+    fileListBuildToken++;
+    if (fileListBuildTimer !== null) {
+        clearTimeout(fileListBuildTimer);
+        fileListBuildTimer = null;
+    }
+    fileListBuildActive = false;
+};
+
+/**
+ * Build the OZFile list under `path` and write it to the store.
+ * Desktop — and mobile lists within one chunk — are built synchronously exactly
+ * as before (no added folder-switch latency). On mobile, lists larger than
+ * MOBILE_TUNING.listChunkSize are converted and appended in slices chained with
+ * setTimeout(0): the first slice lands synchronously (no empty flash),
+ * intermediate slices are invisible to the user (the virtualized window renders
+ * a stable subset) and the last slice carries the final complete state.
+ * requestIdleCallback is NOT available in iOS WKWebView, hence setTimeout.
+ */
+export const setFileListUnderPath = (params: {
+    path: string;
+    plugin: FileTreeAlternativePlugin;
+    excludedExtensions: string[];
+    excludedFolders: string[];
+}): void => {
+    // Any new build supersedes an in-flight one
+    cancelChunkedFileListBuild();
+    const { path, plugin, excludedExtensions, excludedFolders } = params;
+    const setOzFileList = usePluginStore.getState().setOzFileList;
+    if (!MOBILE_TUNING.isMobile) {
+        // Desktop unchanged: one synchronous build
+        setOzFileList(getFilesUnderPath({ path, plugin, excludedExtensions, excludedFolders }));
+        return;
+    }
+    const tFiles = getVisibleTFilesUnderPath({ path, plugin, excludedExtensions, excludedFolders });
+    const chunkSize = MOBILE_TUNING.listChunkSize;
+    if (tFiles.length <= chunkSize) {
+        // Small mobile lists stay synchronous
+        setOzFileList(tFiles.map(TFile2OZFile));
+        return;
+    }
+    const token = fileListBuildToken;
+    fileListBuildActive = true;
+    const accumulated: OZFile[] = [];
+    let index = 0;
+    const step = () => {
+        fileListBuildTimer = null;
+        if (token !== fileListBuildToken) {
+            // Superseded mid-build (folder/filter change, modify flush, search,
+            // vault event): cancel + discard — a fresher build takes over
+            fileListBuildActive = false;
+            return;
+        }
+        const end = Math.min(index + chunkSize, tFiles.length);
+        for (; index < end; index++) accumulated.push(TFile2OZFile(tFiles[index]));
+        // Fresh array identity per slice; downstream search/sort memos recompute
+        // per append (O(chunk count) total — acceptable)
+        setOzFileList(accumulated.slice());
+        if (index < tFiles.length) {
+            fileListBuildTimer = setTimeout(step, 0);
+        } else {
+            fileListBuildActive = false;
+        }
+    };
+    step();
 };
 
 // Converted from TFile to OZFile

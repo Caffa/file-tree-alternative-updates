@@ -202,6 +202,9 @@ export const handleSearch = (params: {
     let { e, activeFolderPath, setSearchPhrase, setOzFileList, setTreeHeader, plugin, focusedFolder, excludedExtensions, excludedFolders } = params;
     const inputValue = e.target.value;
     setSearchPhrase(inputValue);
+    // C2: search replaces the whole list — an in-flight chunked build must not
+    // append its (pre-search) slices over the search results
+    Util.cancelChunkedFileListBuild();
     let searchPhrase = inputValue;
     let searchFolder = activeFolderPath;
 

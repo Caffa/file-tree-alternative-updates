@@ -65,14 +65,15 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
 
     const setNewFileList = (folderPath?: string) => {
         let filesPath = folderPath ? folderPath : activeFolderPath;
-        setOzFileList(
-            FileTreeUtils.getFilesUnderPath({
-                path: filesPath,
-                plugin: plugin,
-                excludedExtensions: excludedExtensions,
-                excludedFolders: excludedFolders,
-            })
-        );
+        // C2: synchronous on desktop and for small mobile lists; on mobile with
+        // lists over MOBILE_TUNING.listChunkSize the conversion is chunked across
+        // setTimeout(0) slices (generation-token guarded inside Utils)
+        FileTreeUtils.setFileListUnderPath({
+            path: filesPath,
+            plugin: plugin,
+            excludedExtensions: excludedExtensions,
+            excludedFolders: excludedFolders,
+        });
     };
 
     const setInitialActiveFolderPath = () => {
@@ -140,6 +141,21 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             FileTreeUtils.debounce(() => {
                 const pending = pendingModifiedPathsRef.current;
                 if (pending.size === 0) return;
+                // C2 (d): a flush landing during a chunked-build window must not be
+                // clobbered by the build's pre-flush snapshot — cancel the build and
+                // re-trigger it from the current state instead of merging into slices
+                if (FileTreeUtils.isChunkedFileListBuildActive()) {
+                    pending.clear();
+                    const state = usePluginStore.getState();
+                    FileTreeUtils.cancelChunkedFileListBuild();
+                    FileTreeUtils.setFileListUnderPath({
+                        path: state.activeFolderPath,
+                        plugin: plugin,
+                        excludedExtensions: state.excludedExtensions,
+                        excludedFolders: state.excludedFolders,
+                    });
+                    return;
+                }
                 // Resolve each pending path against the vault NOW — skip paths that were
                 // renamed/deleted while pending, and never patch from a stale captured TFile
                 const resolved: OZFile[] = [];
@@ -167,6 +183,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     );
     // Cancel pending patch on unmount — the list is rebuilt from scratch on mount anyway
     useEffect(() => () => flushModifiedFiles.cancel(), [flushModifiedFiles]);
+    // Cancel an in-flight chunked list build on unmount
+    useEffect(() => () => FileTreeUtils.cancelChunkedFileListBuild(), []);
 
     // --> Debounced folder-tree rebuild for TFolder events.
     // Gated by folderEventAffectsFocusedFolder (nothing visible → no rebuild at all) and
@@ -219,6 +237,13 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // Each Focused Folder Change triggers new folder tree build
     useEffect(() => {
         if (focusedFolder) {
+            // C2: a focusedFolder change invalidates an in-flight chunked list
+            // build — cancel it and rebuild from the current state so the list
+            // never stays partial
+            if (FileTreeUtils.isChunkedFileListBuildActive()) {
+                FileTreeUtils.cancelChunkedFileListBuild();
+                if (usePluginStore.getState().activeFolderPath !== '') setNewFileList();
+            }
             setFolderTree(
                 FileTreeUtils.createFolderTree({
                     startFolder: focusedFolder,
@@ -363,6 +388,21 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             // Update current View
             let currentView: string = usePluginStore.getState().view;
             if (currentView === 'file') {
+                // C2: any file event during an in-flight chunked mobile build cancels
+                // the build (its file snapshot predates the event) and restarts it from
+                // the current vault state — patching slices would be lost or duplicated
+                // when the build's later slices overwrote them. The first slice of the
+                // restart lands synchronously, so the branch logic below keeps working.
+                if (FileTreeUtils.isChunkedFileListBuildActive()) {
+                    FileTreeUtils.cancelChunkedFileListBuild();
+                    const storeNow = usePluginStore.getState();
+                    FileTreeUtils.setFileListUnderPath({
+                        path: currentActiveFolderPath,
+                        plugin: plugin,
+                        excludedExtensions: storeNow.excludedExtensions,
+                        excludedFolders: storeNow.excludedFolders,
+                    });
+                }
                 let currentFileList: OZFile[] = usePluginStore.getState().ozFileList;
                 // Evaluate changes
                 if (changeType === 'rename' || changeType === 'modify' || changeType === 'delete') {

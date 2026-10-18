@@ -271,6 +271,8 @@ export function FileComponent(props: FilesProps) {
     const toggleSearchBox = () => {
         setSearchPhrase('');
         setSearchBoxVisible(!searchBoxVisible);
+        // C2: this list write must not be clobbered by an in-flight chunked build
+        Util.cancelChunkedFileListBuild();
         setOzFileList(
             Util.getFilesUnderPath({
                 path: activeFolderPath,
