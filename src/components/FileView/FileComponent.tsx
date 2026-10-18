@@ -11,11 +11,13 @@ import { TFolder } from 'obsidian';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { registerVirtualFileScroller, unregisterVirtualFileScroller } from 'utils/virtualListBridge';
 
-// Estimated row height before a row is measured (styles.css: 19px line-height + title
-// padding/borders + 1px row border-bottom = 23px). Rows are measured dynamically, so
+// Row height before a row is measured (styles.css: 19px line-height + title
+// padding/borders + 1px row border-bottom). Rows are measured dynamically, so
 // this only shapes the first paint and the estimate for not-yet-measured rows.
-const ROW_HEIGHT_ESTIMATE = 23;
-const ROW_OVERSCAN = 5;
+// Both constants come from the single mobile-tuning gate — desktop values
+// unchanged (23 / 5); mobile rows measure ~25px and get a smaller overscan.
+const ROW_HEIGHT_ESTIMATE = Util.MOBILE_TUNING.rowHeightEstimate;
+const ROW_OVERSCAN = Util.MOBILE_TUNING.rowOverscan;
 
 // Insert into a descending-mtime array, keeping equal-mtime items in their original (stable) order.
 // The mtime is passed in (already normalized with `?? 0`) so missing stats behave exactly

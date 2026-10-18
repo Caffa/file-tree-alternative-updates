@@ -394,8 +394,25 @@ export function debounce<T extends (...args: any[]) => void>(fn: T, delay: numbe
     return debounced as T & { cancel: () => void };
 }
 
-export const platformIsMobile = () => {
-    return Platform.isMobile;
+// --- Mobile-aware tuning gate (computed once at module init, plain module const) ---
+// Desktop values are UNCHANGED — mobile-only tuning through this one gate:
+// same features, deferred/cheaper interaction on phones.
+const isMobileDevice = Platform.isMobile;
+export const MOBILE_TUNING = {
+    /** master gate for every mobile-only code path */
+    isMobile: isMobileDevice,
+    /** modify-path list flush (MainComponent debounced patch; was hardcoded 1000) */
+    listUpdateDebounceMs: isMobileDevice ? 2500 : 1000,
+    /** debouncedRecentFolderUpdate flush window (main.ts event queue; was 200) */
+    recentFolderQueueMs: isMobileDevice ? 1000 : 200,
+    /** recent-folders localStorage trailing write timer (main.ts; was 5000) */
+    persistDebounceMs: isMobileDevice ? 15000 : 5000,
+    /** TanStack overscan rows in FileComponent (was 5) */
+    rowOverscan: isMobileDevice ? 2 : 5,
+    /** first-paint row height estimate; mobile rows are ~25px (21px line-height) vs desktop 23 */
+    rowHeightEstimate: isMobileDevice ? 25 : 23,
+    /** C2 chunk size for the initial OZFile conversion (mobile only) */
+    listChunkSize: 2000,
 };
 
 export const createNewFile = async (e: React.MouseEvent | null, folderPath: string, plugin: FileTreeAlternativePlugin) => {

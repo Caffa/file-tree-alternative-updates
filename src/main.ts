@@ -4,7 +4,7 @@ import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } f
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle, deriveRecentFolders } from 'utils/Utils';
+import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING } from 'utils/Utils';
 import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -559,7 +559,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.recentFoldersPersistTimer = setTimeout(() => {
             this.recentFoldersPersistTimer = null;
             this.flushRecentFoldersCache();
-        }, 5000);
+        }, MOBILE_TUNING.persistDebounceMs);
     };
 
     /** Write the serialized map to localStorage only if it changed since the last write. */
@@ -643,6 +643,6 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
             // Single derive + store update + localStorage persist
             this.finalizeRecentFolderUpdate(folderMtimes);
-        }, 200);
+        }, MOBILE_TUNING.recentFolderQueueMs);
     };
 }

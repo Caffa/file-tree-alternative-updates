@@ -162,7 +162,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                     changed = true;
                 }
                 if (changed) usePluginStore.getState().setOzFileList(next);
-            }, 1000),
+            }, FileTreeUtils.MOBILE_TUNING.listUpdateDebounceMs),
         [plugin]
     );
     // Cancel pending patch on unmount — the list is rebuilt from scratch on mount anyway
