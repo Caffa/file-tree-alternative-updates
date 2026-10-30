@@ -20,7 +20,13 @@ class EventBus {
 
     /** Emit an event with optional payload arguments. */
     emit(event: string, ...args: any[]): void {
-        this.listeners.get(event)?.forEach((fn) => fn(...args));
+        this.listeners.get(event)?.forEach((fn) => {
+            try {
+                fn(...args);
+            } catch (e) {
+                console.warn('File Tree Alternative: eventBus listener failed for', event, e);
+            }
+        });
     }
 }
 

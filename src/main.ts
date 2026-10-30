@@ -4,7 +4,7 @@ import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } f
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING, loadScoped, saveScoped, removeScoped } from 'utils/Utils';
+import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING, loadScoped, saveScoped, removeScoped, isTreeHidden, invalidateOZFileCache, clearOZFileCache, getFolderNoteCountMap } from 'utils/Utils';
 import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -41,6 +41,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.addSettingTab(new FileTreeAlternativePluginSettingsTab(this.app, this));
         await this.loadSettings();
 
+        // Clear stale OZFile conversion cache on plugin load
+        clearOZFileCache();
         // Load recent folders from localStorage cache (no full vault scan)
         this.loadRecentFoldersCache();
 
@@ -68,6 +70,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 // Also schedule a fallback in case no layout-change fires
                 setTimeout(() => { this.viewOpenedOnStart = false; }, 2000);
             }, 500);
+
         });
 
         // Listen for layout changes to catch and clean up any duplicate panes
@@ -127,11 +130,52 @@ export default class FileTreeAlternativePlugin extends Plugin {
             },
         });
 
+        // Dev command: verify folder-count map (optional)
+        this.addCommand({
+            id: 'verify-folder-count-map',
+            name: 'Verify Folder Count Map',
+            callback: () => {
+                try {
+                    const recomputed = getFolderNoteCountMap(this);
+                    const current = usePluginStore.getState().folderFileCountMap;
+                    let same = Object.keys(recomputed).length === Object.keys(current).length;
+                    if (same) {
+                        const allKeys = new Set([...Object.keys(recomputed), ...Object.keys(current)]);
+                        for (const key of allKeys) {
+                            const r = recomputed[key];
+                            const c = current[key];
+                            if (!r || !c || r.open !== c.open || r.closed !== c.closed) {
+                                same = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (same) {
+                        new Notice('File Tree Alternative: folder count map matches');
+                    } else {
+                        console.warn('File Tree Alternative: folder count map mismatch', { recomputed, current });
+                        new Notice('File Tree Alternative: folder count map mismatch (see console)');
+                    }
+                } catch (e) {
+                    console.warn('File Tree Alternative: verify-folder-count-map failed', e);
+                }
+            },
+        });
+
         // Add event listeners for vault changes (using registerEvent for proper cleanup)
         this.registerEvent(this.app.vault.on('create', this.onCreate));
         this.registerEvent(this.app.vault.on('delete', this.onDelete));
         this.registerEvent(this.app.vault.on('modify', this.onModify));
         this.registerEvent(this.app.vault.on('rename', this.onRename));
+
+        // Subscribe to the store's visibility flag so IO-driven transitions
+        // (IntersectionObserver in MainComponent) drain queued recent-folder work.
+        // This is the single transition consumer; avoid adding other callers.
+        usePluginStore.subscribe((state, prev) => {
+            if (state.treeVisible && !prev.treeVisible) {
+                this.onTreeBecameVisible();
+            }
+        });
 
         // Ribbon Icon For Opening
         this.refreshIconRibbon();
@@ -159,13 +203,15 @@ export default class FileTreeAlternativePlugin extends Plugin {
         this.bookmarksRemoveEventListener();
         this.breadcrumbRemoveEventListener();
         delete (window as any)['file-tree-alternative'];
+        // Drain queued recent-folder events into the map so they survive in the cache.
+        this.drainRecentFolderUpdateQueue();
         if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
         // Flush pending recent-folder cache before the timeouts/localStorage go away
         if (this.recentFoldersPersistTimer) {
             clearTimeout(this.recentFoldersPersistTimer);
             this.recentFoldersPersistTimer = null;
         }
-        this.flushRecentFoldersCache();
+        this.flushRecentFoldersCache(true);
     }
 
     async loadSettings() {
@@ -340,10 +386,40 @@ export default class FileTreeAlternativePlugin extends Plugin {
         });
     };
 
-    onCreate = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'create', ''); this.updateRecentFolderOnVaultEvent(file, 'create'); };
-    onDelete = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'delete', ''); this.updateRecentFolderOnVaultEvent(file, 'delete'); };
-    onModify = (file: TAbstractFile) => { this.triggerVaultChangeEvent(file, 'modify', ''); this.updateRecentFolderOnVaultEvent(file, 'modify'); };
-    onRename = (file: TAbstractFile, oldPath: string) => { this.triggerVaultChangeEvent(file, 'rename', oldPath); this.updateRecentFolderOnVaultEvent(file, 'rename', oldPath); };
+    onCreate = (file: TAbstractFile) => {
+        try {
+            this.triggerVaultChangeEvent(file, 'create', '');
+            this.updateRecentFolderOnVaultEvent(file, 'create');
+        } catch (e) {
+            console.warn('File Tree Alternative: onCreate failed', e);
+        }
+    };
+    onDelete = (file: TAbstractFile) => {
+        try {
+            invalidateOZFileCache(file.path);
+            this.triggerVaultChangeEvent(file, 'delete', '');
+            this.updateRecentFolderOnVaultEvent(file, 'delete');
+        } catch (e) {
+            console.warn('File Tree Alternative: onDelete failed', e);
+        }
+    };
+    onModify = (file: TAbstractFile) => {
+        try {
+            this.triggerVaultChangeEvent(file, 'modify', '');
+            this.updateRecentFolderOnVaultEvent(file, 'modify');
+        } catch (e) {
+            console.warn('File Tree Alternative: onModify failed', e);
+        }
+    };
+    onRename = (file: TAbstractFile, oldPath: string) => {
+        try {
+            invalidateOZFileCache(oldPath);
+            this.triggerVaultChangeEvent(file, 'rename', oldPath);
+            this.updateRecentFolderOnVaultEvent(file, 'rename', oldPath);
+        } catch (e) {
+            console.warn('File Tree Alternative: onRename failed', e);
+        }
+    };
 
     refreshIconRibbon = () => {
         this.ribbonIconEl?.remove();
@@ -394,11 +470,15 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 return;
             }
             await leaf.setViewState({ type: this.VIEW_TYPE });
-            if (showAfterAttach) this.app.workspace.revealLeaf(leaf);
+            if (showAfterAttach) {
+                this.app.workspace.revealLeaf(leaf);
+                usePluginStore.getState().setTreeVisible(true);
+            }
         } else {
             // Already mounted - show only the first leaf
             if (showAfterAttach) {
                 this.app.workspace.revealLeaf(leafs[0]);
+                usePluginStore.getState().setTreeVisible(true);
             }
         }
     };
@@ -496,7 +576,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
     private applyRecentFolderEvent = (folderMtimes: Map<string, number>, file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
         if (eventType === 'modify' || eventType === 'create') {
             if (file instanceof TFile) {
-                const mtime = file.stat.mtime;
+                const mtime = file.stat?.mtime ?? 0;
                 let folder = file.parent;
                 while (folder) {
                     const current = folderMtimes.get(folder.path);
@@ -519,7 +599,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
                         this.recomputeFolderMtime(folderMtimes, oldFolder);
                     }
                 }
-                const mtime = file.stat.mtime;
+                const mtime = file.stat?.mtime ?? 0;
                 let folder = file.parent;
                 while (folder) {
                     const current = folderMtimes.get(folder.path);
@@ -563,7 +643,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     /** Write the serialized map to localStorage only if it changed since the last write. */
-    private flushRecentFoldersCache = () => {
+    private flushRecentFoldersCache = (force: boolean = false) => {
+        if (!force && isTreeHidden()) return;
         if (!this.recentFoldersPersistDirty) return;
         this.recentFoldersPersistDirty = false;
         try {
@@ -584,7 +665,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
         let maxMtime = 0;
         const collectMaxMtime = (f: TFolder): number => {
             let max = 0;
-            for (const child of f.children) {
+            for (const child of f.children ?? []) {
                 if (child instanceof TFile) {
                     if (child.stat.mtime > max) max = child.stat.mtime;
                 } else if (child instanceof TFolder) {
@@ -617,20 +698,17 @@ export default class FileTreeAlternativePlugin extends Plugin {
         }
     };
 
-    /** Debounced wrapper for recent folder updates — batches rapid successive vault events. */
-    private recentFolderUpdateQueue: { file: TAbstractFile; eventType: string; oldPath?: string }[] = [];
-    private recentFolderUpdateTimer: ReturnType<typeof setTimeout> | null = null;
-    private debouncedRecentFolderUpdate = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
-        this.recentFolderUpdateQueue.push({ file, eventType, oldPath });
-        if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
-        this.recentFolderUpdateTimer = setTimeout(() => {
-            const queue = [...this.recentFolderUpdateQueue];
-            this.recentFolderUpdateQueue = [];
-            this.recentFolderUpdateTimer = null;
+    /** Drain the queued recent-folder events into a single store update + persist schedule. */
+    private drainRecentFolderUpdateQueue = () => {
+        const queue = [...this.recentFolderUpdateQueue];
+        this.recentFolderUpdateQueue = [];
+        this.recentFolderUpdateTimer = null;
+        if (queue.length === 0) return;
 
-            // Single map copy for the entire batch
-            const folderMtimes = new Map(usePluginStore.getState().recentFolderMtimes);
+        // Single map copy for the entire batch
+        const folderMtimes = new Map(usePluginStore.getState().recentFolderMtimes);
 
+        try {
             // Process the last event for each unique file path, mutating the same map
             const seen = new Set<string>();
             for (let i = queue.length - 1; i >= 0; i--) {
@@ -643,6 +721,37 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
             // Single derive + store update + localStorage persist
             this.finalizeRecentFolderUpdate(folderMtimes);
+        } catch (e) {
+            console.warn('File Tree Alternative: drainRecentFolderUpdateQueue failed', e);
+        }
+    };
+
+    /** Deferred work that must run as soon as the file-tree pane becomes visible. */
+    private onTreeBecameVisible = () => {
+        if (this.recentFolderUpdateTimer) {
+            clearTimeout(this.recentFolderUpdateTimer);
+            this.recentFolderUpdateTimer = null;
+        }
+        if (this.recentFolderUpdateQueue.length > 0) {
+            this.drainRecentFolderUpdateQueue();
+        }
+        if (this.recentFoldersPersistDirty) {
+            this.flushRecentFoldersCache();
+        }
+    };
+
+    /** Debounced wrapper for recent folder updates — batches rapid successive vault events. */
+    private recentFolderUpdateQueue: { file: TAbstractFile; eventType: string; oldPath?: string }[] = [];
+    private recentFolderUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    private debouncedRecentFolderUpdate = (file: TAbstractFile, eventType: 'create' | 'delete' | 'modify' | 'rename', oldPath?: string) => {
+        this.recentFolderUpdateQueue.push({ file, eventType, oldPath });
+        if (this.recentFolderUpdateTimer) clearTimeout(this.recentFolderUpdateTimer);
+        this.recentFolderUpdateTimer = setTimeout(() => {
+            if (isTreeHidden()) {
+                this.recentFolderUpdateTimer = null;
+                return;
+            }
+            this.drainRecentFolderUpdateQueue();
         }, MOBILE_TUNING.recentFolderQueueMs);
     };
 }

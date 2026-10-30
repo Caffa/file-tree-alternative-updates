@@ -158,9 +158,32 @@ export const setFileListUnderPath = (params: {
     step();
 };
 
+// Module-level LRU cache for TFile -> OZFile conversions
+const ozFileCache = new Map<string, { oz: OZFile; mtime: number; ctime: number; size: number }>();
+
+/** Invalidate the cached OZFile entry for a given path. */
+export const invalidateOZFileCache = (path: string): void => {
+    ozFileCache.delete(path);
+};
+
+/** Clear the entire OZFile conversion cache. */
+export const clearOZFileCache = (): void => {
+    ozFileCache.clear();
+};
+
 // Converted from TFile to OZFile
 export const TFile2OZFile = (t: TFile): OZFile => {
-    return {
+    // LRU cache keyed by path + stat fields; refresh on hit
+    const cacheKey = t.path;
+    const cached = ozFileCache.get(cacheKey);
+    if (cached && cached.mtime === t.stat.mtime && cached.ctime === t.stat.ctime && cached.size === t.stat.size) {
+        // LRU refresh
+        ozFileCache.delete(cacheKey);
+        ozFileCache.set(cacheKey, cached);
+        return cached.oz;
+    }
+
+    const oz: OZFile = {
         path: t.path,
         basename: t.basename,
         extension: t.extension,
@@ -170,15 +193,23 @@ export const TFile2OZFile = (t: TFile): OZFile => {
             size: t.stat.size,
         },
         parent: {
-            path: t.parent.path,
+            path: t.parent?.path ?? '',
         },
         isFolderNote: isFolderNote(t),
     };
+
+    ozFileCache.set(cacheKey, { oz, mtime: t.stat.mtime, ctime: t.stat.ctime, size: t.stat.size });
+    if (ozFileCache.size > 3000) {
+        // evict oldest (first key)
+        const oldest = ozFileCache.keys().next().value;
+        if (oldest !== undefined) ozFileCache.delete(oldest);
+    }
+    return oz;
 };
 
 // Check if the file is a folder note
 export const isFolderNote = (t: TFile) => {
-    return t.extension === 'md' && t.basename === t.parent.name;
+    return t.extension === 'md' && t.basename === t.parent?.name;
 };
 
 // Helper Function to Create Folder Tree
@@ -356,11 +387,8 @@ export const incrementFolderCountMap = (map: FolderFileCountMap, file: TFile, de
     if (!isFileVisibleInList(file, visibilityOptions)) return map;
 
     for (let folder = file.parent; folder != null; folder = folder.parent) {
-        if (!map[folder.path]) map[folder.path] = { open: 0, closed: 0 };
-        // Open count: only direct parent
-        if (folder == file.parent) map[folder.path].open += delta;
-        // Closed count: all ancestors
-        map[folder.path].closed += delta;
+        const prev = map[folder.path] || { open: 0, closed: 0 };
+        map[folder.path] = { open: prev.open + (folder == file.parent ? delta : 0), closed: prev.closed + delta };
     }
     return map;
 };
@@ -408,7 +436,7 @@ export const applySubtreeCountDelta = (map: FolderFileCountMap, folder: TFolder,
 
 // Check if folder has child folder
 export const hasChildFolder = (folder: TFolder): boolean => {
-    let children = folder.children;
+    let children = folder.children ?? [];
     for (let child of children) {
         if (child instanceof TFolder) return true;
     }
@@ -427,7 +455,7 @@ export const getFileNameAndExtension = (fullName: string) => {
 // Returns all parent folder paths
 export const getParentFolderPaths = (file: TFile): string[] => {
     let folderPaths: string[] = ['/'];
-    let parts: string[] = file.parent.path.split('/');
+    let parts: string[] = (file.parent?.path ?? '').split('/');
     let current: string = '';
     for (let i = 0; i < parts.length; i++) {
         current += `${i === 0 ? '' : '/'}` + parts[i];
@@ -509,7 +537,16 @@ export const MOBILE_TUNING = {
     rowHeightEstimate: isMobileDevice ? 25 : 23,
     /** C2 chunk size for the initial OZFile conversion (mobile only) */
     listChunkSize: 2000,
+    /** trailing debounce for header ResizeObserver re-measure (keyboard viewport resizes) */
+    scrollMarginRemeasureMs: isMobileDevice ? 150 : 50,
 };
+
+/**
+ * Mobile-only hidden-tree gate. On desktop this is always false, so vault-event
+ * work stays live and the file tree never defers updates just because an editor
+ * leaf is active.
+ */
+export const isTreeHidden = (): boolean => MOBILE_TUNING.isMobile && !usePluginStore.getState().treeVisible;
 
 export const createNewFile = async (e: React.MouseEvent | null, folderPath: string, plugin: FileTreeAlternativePlugin) => {
     const targetFolder = plugin.app.vault.getFolderByPath(folderPath);

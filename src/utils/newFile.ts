@@ -7,12 +7,18 @@ export const openFile = (props: { file: { path: string }; app: App; newLeaf: boo
     const { file, app, newLeaf, leafBySplit } = props;
     const fileToOpen = app.vault.getFileByPath(file.path);
     if (!fileToOpen) return;
-    const leaf = app.workspace.getLeaf(newLeaf);
-    const targetLeaf = leafBySplit ? app.workspace.createLeafBySplit(leaf, 'vertical') : leaf;
-    app.workspace.setActiveLeaf(targetLeaf, {
-        focus: true,
-    });
-    targetLeaf.openFile(fileToOpen, { eState: { focus: true } });
+    try {
+        const leaf = app.workspace.getLeaf(newLeaf);
+        const targetLeaf = leafBySplit ? app.workspace.createLeafBySplit(leaf, 'vertical') : leaf;
+        app.workspace.setActiveLeaf(targetLeaf, {
+            focus: true,
+        });
+        targetLeaf.openFile(fileToOpen, { eState: { focus: true } }).catch((e: any) => {
+            console.warn('File Tree Alternative: openFile failed', e);
+        });
+    } catch (e) {
+        console.warn('File Tree Alternative: openFile failed', e);
+    }
 };
 
 /** Format a Date to 'YYYY-MM-DD hh:mm:ss' without external dependencies. */
@@ -83,6 +89,14 @@ export const createNewMarkdownFile = async (plugin: FileTreeAlternativePlugin, f
             new Notice(`Failed to create file: could not find an available name for "${baseName}.md"`);
             return;
         }
+
+        // Re-resolve by path before fallback/open; guard missing
+        const resolvedFile = plugin.app.vault.getFileByPath(newFile.path);
+        if (!resolvedFile) {
+            new Notice(`Failed to create file: could not resolve "${newFile.path}"`);
+            return;
+        }
+        newFile = resolvedFile;
 
         try {
             await plugin.app.workspace.openLinkText(newFile.path, '/', false);

@@ -59,6 +59,8 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const setFocusedFolder = usePluginStore((s) => s.setFocusedFolder);
     const activeOZFile = usePluginStore((s) => s.activeOZFile);
     const setActiveOzFile = usePluginStore((s) => s.setActiveOZFile);
+    const treeVisible = usePluginStore((s) => s.treeVisible);
+    const setTreeVisible = usePluginStore((s) => s.setTreeVisible);
 
     // Ref to gate scroll-to-file: only true when user explicitly reveals a file
     const needsScrollRef = useRef(false);
@@ -136,48 +138,57 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     // whole file list synchronously. Instead, accumulate the changed paths in a Set and
     // patch the list once per quiet second through the shared FileTreeUtils.debounce helper.
     const pendingModifiedPathsRef = useRef<Set<string>>(new Set());
+    const pendingVaultRefreshRef = useRef(false);
+
+    // Non-debounced body of the modify flush: called by the debounce wrapper and
+    // directly when the tree becomes visible after being hidden during a burst.
+    const flushModifiedFilesNow = () => {
+        const pending = pendingModifiedPathsRef.current;
+        if (pending.size === 0) return;
+        // C2 (d): a flush landing during a chunked-build window must not be
+        // clobbered by the build's pre-flush snapshot — cancel the build and
+        // re-trigger it from the current state instead of merging into slices
+        if (FileTreeUtils.isChunkedFileListBuildActive()) {
+            pending.clear();
+            const state = usePluginStore.getState();
+            FileTreeUtils.cancelChunkedFileListBuild();
+            FileTreeUtils.setFileListUnderPath({
+                path: state.activeFolderPath,
+                plugin: plugin,
+                excludedExtensions: state.excludedExtensions,
+                excludedFolders: state.excludedFolders,
+            });
+            return;
+        }
+        // Resolve each pending path against the vault NOW — skip paths that were
+        // renamed/deleted while pending, and never patch from a stale captured TFile
+        const resolved: OZFile[] = [];
+        for (const path of pending) {
+            const tFile = plugin.app.vault.getFileByPath(path);
+            if (tFile) resolved.push(FileTreeUtils.TFile2OZFile(tFile));
+        }
+        pending.clear();
+        if (resolved.length === 0) return;
+        // Patch the CURRENT list in place (order preserved; the existing sortedFiles
+        // memo re-sorts because the array identity changes)
+        const currentFileList = usePluginStore.getState().ozFileList;
+        const indexByPath = new Map(currentFileList.map((f, i) => [f.path, i] as const));
+        let changed = false;
+        const next = [...currentFileList];
+        for (const ozFile of resolved) {
+            const idx = indexByPath.get(ozFile.path);
+            if (idx === undefined) continue; // exists in vault but not listed — nothing to patch
+            next[idx] = ozFile;
+            changed = true;
+        }
+        if (changed) usePluginStore.getState().setOzFileList(next);
+    };
+
     const flushModifiedFiles = useMemo(
         () =>
             FileTreeUtils.debounce(() => {
-                const pending = pendingModifiedPathsRef.current;
-                if (pending.size === 0) return;
-                // C2 (d): a flush landing during a chunked-build window must not be
-                // clobbered by the build's pre-flush snapshot — cancel the build and
-                // re-trigger it from the current state instead of merging into slices
-                if (FileTreeUtils.isChunkedFileListBuildActive()) {
-                    pending.clear();
-                    const state = usePluginStore.getState();
-                    FileTreeUtils.cancelChunkedFileListBuild();
-                    FileTreeUtils.setFileListUnderPath({
-                        path: state.activeFolderPath,
-                        plugin: plugin,
-                        excludedExtensions: state.excludedExtensions,
-                        excludedFolders: state.excludedFolders,
-                    });
-                    return;
-                }
-                // Resolve each pending path against the vault NOW — skip paths that were
-                // renamed/deleted while pending, and never patch from a stale captured TFile
-                const resolved: OZFile[] = [];
-                for (const path of pending) {
-                    const tFile = plugin.app.vault.getFileByPath(path);
-                    if (tFile) resolved.push(FileTreeUtils.TFile2OZFile(tFile));
-                }
-                pending.clear();
-                if (resolved.length === 0) return;
-                // Patch the CURRENT list in place (order preserved; the existing sortedFiles
-                // memo re-sorts because the array identity changes)
-                const currentFileList = usePluginStore.getState().ozFileList;
-                const indexByPath = new Map(currentFileList.map((f, i) => [f.path, i] as const));
-                let changed = false;
-                const next = [...currentFileList];
-                for (const ozFile of resolved) {
-                    const idx = indexByPath.get(ozFile.path);
-                    if (idx === undefined) continue; // exists in vault but not listed — nothing to patch
-                    next[idx] = ozFile;
-                    changed = true;
-                }
-                if (changed) usePluginStore.getState().setOzFileList(next);
+                if (FileTreeUtils.isTreeHidden()) return;
+                flushModifiedFilesNow();
             }, FileTreeUtils.MOBILE_TUNING.listUpdateDebounceMs),
         [plugin]
     );
@@ -185,6 +196,52 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     useEffect(() => () => flushModifiedFiles.cancel(), [flushModifiedFiles]);
     // Cancel an in-flight chunked list build on unmount
     useEffect(() => () => FileTreeUtils.cancelChunkedFileListBuild(), []);
+
+    // DOM visibility is authoritative for the hidden-tree gate: mobile drawer open/close
+    // may not fire active-leaf-change for the tree leaf, so observe the view container.
+    useEffect(() => {
+        const container = props.fileTreeView.contentEl;
+        if (!container || typeof IntersectionObserver === 'undefined') return;
+        const observer = new IntersectionObserver(([entry]) => {
+            setTreeVisible(entry.isIntersecting);
+        }, { threshold: 0 });
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
+    // Hidden-pane coalescing: when the file-tree becomes visible again, flush any
+    // vault-event work that accumulated while the pane was hidden.
+    useEffect(() => {
+        if (!treeVisible) return;
+        if (pendingVaultRefreshRef.current) {
+            pendingVaultRefreshRef.current = false;
+            FileTreeUtils.cancelChunkedFileListBuild();
+            const state = usePluginStore.getState();
+            if (state.view === 'file') {
+                FileTreeUtils.setFileListUnderPath({
+                    path: state.activeFolderPath,
+                    plugin: plugin,
+                    excludedExtensions: state.excludedExtensions,
+                    excludedFolders: state.excludedFolders,
+                });
+            }
+            if (state.focusedFolder) {
+                setFolderTree(
+                    FileTreeUtils.createFolderTree({
+                        startFolder: state.focusedFolder,
+                        plugin: plugin,
+                        excludedFolders: state.excludedFolders,
+                    })
+                );
+            }
+            setOzPinnedFiles(getPinnedFilesFromSettings());
+            if (plugin.settings.folderCount) {
+                writeFolderCountMap(FileTreeUtils.getFolderNoteCountMap(plugin));
+            }
+        } else if (pendingModifiedPathsRef.current.size > 0) {
+            flushModifiedFilesNow();
+        }
+    }, [treeVisible]);
 
     // --> Debounced folder-tree rebuild for TFolder events.
     // Gated by folderEventAffectsFocusedFolder (nothing visible → no rebuild at all) and
@@ -194,6 +251,10 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
     const debouncedFolderTreeRebuild = useMemo(
         () =>
             FileTreeUtils.debounce(() => {
+                if (FileTreeUtils.isTreeHidden()) {
+                    pendingVaultRefreshRef.current = true;
+                    return;
+                }
                 const focusedFolder = usePluginStore.getState().focusedFolder;
                 if (!focusedFolder) return;
                 setFolderTree(
@@ -321,7 +382,11 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         let openFolders: string[] = [];
         let localStorageOpenFolders = FileTreeUtils.loadScoped(plugin.keys.openFoldersKey);
         if (localStorageOpenFolders) {
-            localStorageOpenFolders = JSON.parse(localStorageOpenFolders);
+            try {
+                localStorageOpenFolders = JSON.parse(localStorageOpenFolders);
+            } catch (e) {
+                return [];
+            }
             for (let folder of localStorageOpenFolders) {
                 const openFolder = plugin.app.vault.getFolderByPath(folder);
                 if (openFolder) openFolders.push(openFolder.path);
@@ -335,7 +400,11 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         let pinnedFiles: OZFile[] = [];
         let localStoragePinnedFiles = FileTreeUtils.loadScoped(plugin.keys.pinnedFilesKey);
         if (localStoragePinnedFiles) {
-            localStoragePinnedFiles = JSON.parse(localStoragePinnedFiles);
+            try {
+                localStoragePinnedFiles = JSON.parse(localStoragePinnedFiles);
+            } catch (e) {
+                return [];
+            }
             for (let file of localStoragePinnedFiles) {
                 const pinnedFile = plugin.app.vault.getFileByPath(file);
                 if (pinnedFile) pinnedFiles.push(FileTreeUtils.TFile2OZFile(pinnedFile));
@@ -373,6 +442,14 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
         // Get Current States via Zustand
         let currentActiveFolderPath: string = usePluginStore.getState().activeFolderPath;
 
+        if (FileTreeUtils.isTreeHidden()) {
+            pendingVaultRefreshRef.current = true;
+            if (file instanceof TFolder && changeType === 'rename' && currentActiveFolderPath === oldPathBeforeRename) {
+                setActiveFolderPath(file.path);
+            }
+            return;
+        }
+
         // File Event Handlers
         if (file instanceof TFile) {
             // Update Pinned Files
@@ -388,12 +465,24 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
             // Update current View
             let currentView: string = usePluginStore.getState().view;
             if (currentView === 'file') {
-                // C2: any file event during an in-flight chunked mobile build cancels
-                // the build (its file snapshot predates the event) and restarts it from
-                // the current vault state — patching slices would be lost or duplicated
-                // when the build's later slices overwrote them. The first slice of the
-                // restart lands synchronously, so the branch logic below keeps working.
+                // Sorts that depend on mtime/size need synchronous updates; otherwise
+                // a modify event can be coalesced into the debounced patch queue.
+                const sortDependsOnMtime =
+                    plugin.settings.sortFilesBy === 'last-update' ||
+                    plugin.settings.sortFilesBy === 'file-size' ||
+                    plugin.settings.sortFoldersBy === 'last-update';
+
+                // C2: non-mtime file modify events during an in-flight chunked mobile build
+                // are queued instead of cancel+restart churn. The debounced flush's
+                // build-active path handles the actual restart once the typing quiet window
+                // expires, so there is at most one rebuild per 2.5s window. Other file
+                // events still cancel+restart because their snapshot predates the event.
                 if (FileTreeUtils.isChunkedFileListBuildActive()) {
+                    if (changeType === 'modify' && !sortDependsOnMtime) {
+                        pendingModifiedPathsRef.current.add(file.path);
+                        flushModifiedFiles();
+                        return;
+                    }
                     FileTreeUtils.cancelChunkedFileListBuild();
                     const storeNow = usePluginStore.getState();
                     FileTreeUtils.setFileListUnderPath({
@@ -439,7 +528,7 @@ export default function MainTreeComponent(props: MainTreeComponentProps) {
                                     return f.path !== oldPathBeforeRename;
                                 }),
                                 // Include any file that roles up to the current active folder, not only the direct ones
-                                ...(file.parent.path.startsWith(currentActiveFolderPath) ? [FileTreeUtils.TFile2OZFile(file)] : []),
+                                ...(file.parent?.path?.startsWith?.(currentActiveFolderPath) ?? false ? [FileTreeUtils.TFile2OZFile(file)] : []),
                             ]);
                             // If active file is renamed, change the active file
                             let currentActiveOZFile: OZFile | null = usePluginStore.getState().activeOZFile;
