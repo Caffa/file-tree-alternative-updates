@@ -4,7 +4,8 @@ import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } f
 import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
 import { VaultChange, eventTypes } from 'utils/types';
 import { eventBus } from 'utils/eventBus';
-import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING, loadScoped, saveScoped, removeScoped, isTreeHidden, invalidateOZFileCache, clearOZFileCache, getFolderNoteCountMap } from 'utils/Utils';
+import { getBookmarkTitle, deriveRecentFolders, MOBILE_TUNING, loadScoped, saveScoped, removeScoped, isTreeHidden, invalidateOZFileCache, clearOZFileCache, getFolderNoteCountMap, debounce } from 'utils/Utils';
+import { getFileTreeLeaves } from './utils/leafGuards';
 import { usePluginStore } from './recoil/pluginStore';
 
 export default class FileTreeAlternativePlugin extends Plugin {
@@ -12,6 +13,12 @@ export default class FileTreeAlternativePlugin extends Plugin {
     ribbonIconEl: HTMLElement | undefined = undefined;
     /** Guard flag to prevent duplicate pane creation during layout initialization */
     private viewOpenedOnStart: boolean = false;
+    /** Serialized promise queue for opening the file tree leaf (mobile restore races). */
+    private openTreeQueue: Promise<void> | null = null;
+    /** Re-entrancy guard for the dedup layout-change handler; load-bearing. */
+    private dedupRunning = false;
+    /** Debounced dedup so rapid layout-change storms collapse to one pass. */
+    private debouncedDeduplicate = debounce(() => this.deduplicateFileTreeLeaves(), 250);
 
     keys = {
         activeFolderPathKey: 'fileTreePlugin-ActiveFolderPath',
@@ -57,6 +64,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
                 await this.openFileTreeLeaf(true);
                 this.viewOpenedOnStart = true;
             }
+            // Insurance in case restore produces no further layout-change.
+            this.debouncedDeduplicate();
             // Lift the guard after layout stabilizes so the panel can be re-opened
             // later if the user closes it. Use a one-time listener with a small
             // delay to avoid racing with workspace restoration on mobile.
@@ -77,7 +86,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
         // that may appear after workspace restoration (common on mobile restart)
         this.registerEvent(
             this.app.workspace.on('layout-change', () => {
-                this.deduplicateFileTreeLeaves();
+                this.debouncedDeduplicate();
             })
         );
 
@@ -436,32 +445,57 @@ export default class FileTreeAlternativePlugin extends Plugin {
      * on mobile when workspace restoration and plugin initialization race.
      */
     deduplicateFileTreeLeaves = () => {
-        const leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
-        if (leafs.length > 1) {
-            // Keep the first leaf, destroy and detach extras
-            for (let i = 1; i < leafs.length; i++) {
-                const leaf = leafs[i];
-                if (leaf.view instanceof FileTreeView) {
-                    leaf.view.destroy();
-                }
+        // Re-entrancy guard is load-bearing: detaching a leaf can fire layout-change,
+        // which would otherwise call this method again and drop the surviving leaf.
+        if (this.dedupRunning) return;
+        this.dedupRunning = true;
+        try {
+            const leafs = getFileTreeLeaves(this.app, this.VIEW_TYPE);
+            if (leafs.length < 2) return;
+            const preferred = leafs.find((l) => l.view instanceof FileTreeView) ?? leafs[0];
+            for (const leaf of leafs) {
+                if (leaf === preferred) continue;
+                if (leaf.view instanceof FileTreeView) leaf.view.destroy();
                 leaf.detach();
             }
+        } finally {
+            this.dedupRunning = false;
         }
     };
 
-    openFileTreeLeaf = async (showAfterAttach: boolean) => {
-        let leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+    openFileTreeLeaf = (showAfterAttach: boolean): Promise<void> => {
+        const run = () => this.doOpenFileTreeLeaf(showAfterAttach);
+        const result = (this.openTreeQueue ?? Promise.resolve()).then(run, run);
+        this.openTreeQueue = result.then(() => undefined, () => undefined);
+        return result;
+    };
+
+    doOpenFileTreeLeaf = async (showAfterAttach: boolean): Promise<void> => {
+        let leafs = getFileTreeLeaves(this.app, this.VIEW_TYPE);
 
         // Deduplication: if there are multiple leaves, clean up extras
         if (leafs.length > 1) {
             this.deduplicateFileTreeLeaves();
-            leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+            leafs = getFileTreeLeaves(this.app, this.VIEW_TYPE);
         }
 
         if (leafs.length == 0) {
             // Only create a new leaf if we haven't already done so during layout init
             // This prevents race conditions with workspace restoration on mobile restart
             if (this.viewOpenedOnStart) return;
+
+            // Mobile restore can leave saved leaves invisible to getLeavesOfType for a
+            // beat; callers are serialized, so wait once and recount before creating.
+            await new Promise((r) => setTimeout(r, 50));
+            leafs = getFileTreeLeaves(this.app, this.VIEW_TYPE);
+            if (leafs.length > 0) {
+                // Restored leaf appeared — reveal it instead of creating a duplicate.
+                if (showAfterAttach) {
+                    this.app.workspace.revealLeaf(leafs[0]);
+                    usePluginStore.getState().setTreeVisible(true);
+                }
+                return;
+            }
 
             // Needs to be mounted
             let leaf = this.app.workspace.getLeftLeaf(false);
@@ -484,7 +518,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     detachFileTreeLeafs = () => {
-        const leafs = this.app.workspace.getLeavesOfType(this.VIEW_TYPE);
+        const leafs = getFileTreeLeaves(this.app, this.VIEW_TYPE);
         for (const leaf of leafs) {
             if (leaf.view instanceof FileTreeView) {
                 leaf.view.destroy();
