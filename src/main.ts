@@ -208,6 +208,8 @@ export default class FileTreeAlternativePlugin extends Plugin {
 
     onunload() {
         console.log('Unloading Alternative File Tree Plugin');
+        // Cancel any pending debounced dedup so its timer cannot fire after unload.
+        this.debouncedDeduplicate.cancel();
         this.detachFileTreeLeafs();
         this.bookmarksRemoveEventListener();
         this.breadcrumbRemoveEventListener();
@@ -440,7 +442,9 @@ export default class FileTreeAlternativePlugin extends Plugin {
     };
 
     /**
-     * Clean up duplicate panes, keeping only the first one.
+     * Clean up duplicate panes, keeping the preferred live FileTreeView leaf
+     * (first leaf whose view is a FileTreeView, falling back to the first leaf)
+     * and destroying/detaching the rest.
      * This prevents the accumulation of duplicate panes that occurs
      * on mobile when workspace restoration and plugin initialization race.
      */
@@ -466,7 +470,7 @@ export default class FileTreeAlternativePlugin extends Plugin {
     openFileTreeLeaf = (showAfterAttach: boolean): Promise<void> => {
         const run = () => this.doOpenFileTreeLeaf(showAfterAttach);
         const result = (this.openTreeQueue ?? Promise.resolve()).then(run, run);
-        this.openTreeQueue = result.then(() => undefined, () => undefined);
+        this.openTreeQueue = result.then((): void => undefined, (): void => undefined);
         return result;
     };
 
