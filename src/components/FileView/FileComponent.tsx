@@ -399,7 +399,7 @@ export function FileComponent(props: FilesProps) {
                                         onClick={(e) => {
                                             FileViewHandlers.sortFileListClickHandle({ e, plugin, forceUpdate });
                                         }}
-                                        aria-label="Sorting Options"
+                                        aria-label="Sorting Options for Files"
                                     />
                                 </div>
                                 <div className="oz-nav-action-button">

@@ -118,6 +118,9 @@ export function MainFolder(props: FolderProps) {
             });
         };
 
+        sortMenu.addItem((mi) => mi.setTitle('Sort Folders By').setIsLabel(true));
+        sortMenu.addSeparator();
+
         addMenuItem('Folder Name', 'A to Z', 'name');
 
         if (plugin.settings.folderCount) {
@@ -128,6 +131,7 @@ export function MainFolder(props: FolderProps) {
 
         // Trigger
         plugin.app.workspace.trigger('sort-menu', sortMenu);
+        console.debug('[File Tree Alternative] folder sort menu opened', { sortFoldersBy: plugin.settings.sortFoldersBy });
         sortMenu.showAtPosition({ x: e.pageX, y: e.pageY });
         return false;
     };
@@ -151,7 +155,7 @@ export function MainFolder(props: FolderProps) {
                     className="oz-nav-action-button"
                     size={folderActionItemSize}
                     onClick={triggerFolderSortOptions}
-                    aria-label="Sorting Options"
+                    aria-label="Sorting Options for Folders"
                 />
                 <Icons.CgChevronDoubleUp
                     className="oz-nav-action-button"

@@ -164,6 +164,9 @@ export const sortFileListClickHandle = (params: { e: React.MouseEvent; plugin: F
         });
     };
 
+    sortMenu.addItem((mi) => mi.setTitle('Sort Files By').setIsLabel(true));
+    sortMenu.addSeparator();
+
     addMenuItem('File Name', 'A', 'Z', 'name');
     addMenuItem('Created', 'New', 'Old', 'created');
     addMenuItem('File Size', 'Big', 'Small', 'file-size');
@@ -182,6 +185,7 @@ export const sortFileListClickHandle = (params: { e: React.MouseEvent; plugin: F
     });
 
     // Trigger
+    console.debug('[File Tree Alternative] file sort menu opened', { sortFilesBy: plugin.settings.sortFilesBy, sortReverse: plugin.settings.sortReverse });
     sortMenu.showAtPosition({ x: e.pageX, y: e.pageY });
 };
 
