@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import Tree from 'components/FolderView/treeComponent/TreeComponent';
 import FileTreeAlternativePlugin from 'main';
 import ConditionalRootFolderWrapper from 'components/FolderView/ConditionalWrapper';
 import { usePluginStore } from '../../recoil/pluginStore';
+import { captureFolderTreeScroll, restoreFolderTreeScroll } from '../../utils/folderScrollMemory';
 import { NestedFolders } from 'components/FolderView/NestedFolders';
 import { TFolder, Menu } from 'obsidian';
 import { VaultChangeModal } from 'modals';
@@ -30,6 +31,14 @@ export function MainFolder(props: FolderProps) {
 
     // Force Update
     const forceUpdate = useForceUpdate();
+
+    // Keeps the folder tree's scroll position across folder/file view switches
+    // (the tree remounts and would otherwise jump back to the top).
+    const foldersWrapperRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        restoreFolderTreeScroll(foldersWrapperRef.current);
+    }, []);
 
     const focusOnFolder = (folder: TFolder) => {
         setFocusedFolder(folder);
@@ -143,7 +152,10 @@ export function MainFolder(props: FolderProps) {
     let folderActionItemSize = 22;
 
     return (
-        <div className="oz-folders-tree-wrapper">
+        <div
+            className="oz-folders-tree-wrapper"
+            ref={foldersWrapperRef}
+            onScroll={() => captureFolderTreeScroll(foldersWrapperRef.current)}>
             <div className="oz-folders-action-items file-tree-header-fixed">
                 <Icons.MdOutlineCreateNewFolder
                     className="oz-nav-action-button"
