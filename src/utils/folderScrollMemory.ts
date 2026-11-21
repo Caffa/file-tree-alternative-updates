@@ -2,7 +2,7 @@
  * Remembers the folder tree's scroll position per plugin view pane.
  *
  * The store is a WeakMap keyed by the pane's root element
- * (`.file-tree-plugin-view`, the same scoping root used by FileComponent),
+ * (`.file-tree-plugin-view`, the same scoping root rendered by FileTreeView),
  * so:
  * - each pane (leaf) keeps its own independent scroll memory,
  * - memory is garbage-collected automatically when a leaf closes,
